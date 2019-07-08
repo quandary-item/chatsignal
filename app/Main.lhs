@@ -7,7 +7,7 @@ available [here](/example/client.html).  In order to understand this example,
 keep the [reference](/reference/) nearby to check out the functions we use.
 
 > {-# LANGUAGE OverloadedStrings #-}
-> module Server where
+> module Main where
 > import Data.Char (isPunctuation, isSpace)
 > import Data.Monoid (mappend)
 > import Data.Text (Text)
