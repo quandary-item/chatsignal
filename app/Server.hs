@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Main where
+module Server where
 
 import Lib
 
@@ -7,6 +7,7 @@ import           Control.Applicative
 import           Snap.Core
 import           Snap.Util.FileServe
 import           Snap.Http.Server
+
 
 main :: IO ()
 main = quickHttpServe site
