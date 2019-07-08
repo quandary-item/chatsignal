@@ -21,6 +21,9 @@ description:         Please see the README on GitHub at <https://github.com/gith
 
 dependencies:
 - base >= 4.7 && < 5
+- mtl
+- network
+- text
 - snap-core
 - snap-server
 - websockets
@@ -30,8 +33,20 @@ library:
   source-dirs: src
 
 executables:
-  chatsignal-exe:
-    main:                Main.hs
+  chatsignal-server-exe:
+    main:                Server.lhs
+    source-dirs:         app
+    ghc-options:
+    - -Wall
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - chatsignal
+
+executables:
+  chatsignal-client-exe:
+    main:                Client.hs
     source-dirs:         app
     ghc-options:
     - -Wall
