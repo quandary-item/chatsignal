@@ -23,14 +23,13 @@ instance FromJSON ConnectRequestData where
       _            -> fail ("unknown action " ++ action)
 
 
-data RequestData = Ping UserID | Say Text | Disconnect deriving Show
+data RequestData = Ping UserID | Say Text deriving Show
 instance FromJSON RequestData where
-  parseJSON = withObject "ping or say or disconnect" $ \o -> do
+  parseJSON = withObject "ping or say" $ \o -> do
     action <- o .: "action"
     case action of
       "ping"       -> Ping <$> o .: "target"
       "say"        -> Say <$> o .: "message"
-      "disconnect" -> pure Disconnect
       _            -> fail ("unknown action " ++ action)
 
 type Client = (Text, WS.Connection)
@@ -67,11 +66,13 @@ revMap value = map ($ value)
 isInvalidUsername :: Text -> Bool
 isInvalidUsername username = not $ or (map ($ username) [T.null, T.any isPunctuation, T.any isSpace])
 
+invalidUsernameErrorMessage :: Text
 invalidUsernameErrorMessage = "Username cannot contain punctuation or whitespace, and cannot be empty"
 
 usernameIsTaken :: Text -> ServerState -> Bool
 usernameIsTaken username = any ((== username) . fst)
 
+usernameIsTakenErrorMessage :: Text
 usernameIsTakenErrorMessage = "Username is already taken by an existing user"
 
 application :: MVar ServerState -> WS.ServerApp
@@ -82,28 +83,45 @@ application state pending = do
     clients <- readMVar state
     case (eitherDecode msg :: Either String ConnectRequestData) of
       Left errorMsg -> WS.sendTextData conn (T.pack errorMsg)
-      Right (Connect username)
-        -- validate username
-        | isInvalidUsername username -> WS.sendTextData conn (invalidUsernameErrorMessage :: Text)
-        -- check if username already exists
-        | usernameIsTaken username clients -> WS.sendTextData conn (usernameIsTakenErrorMessage :: Text)
-        | otherwise -> flip finally disconnect $ do
+      Right (Connect username) -> do
+        case checkClient client clients of 
+          Just validationErrorMessage -> WS.sendTextData conn validationErrorMessage
+          Nothing -> flip finally disconnect $ do
             -- send a welcome / motd
             WS.sendTextData conn ("Welcome to One Hour Chat!" :: Text)
 
+
             -- create a new user, broadcast the new user list to everyone else
-            
+            modifyMVar_ state $ \s -> do
+              let s' = addClient client s
+              WS.sendTextData conn $ "Current users: " `mappend` T.intercalate ", " (map fst s)
+              broadcast (fst client `mappend` " joined") s'
+              return s'
+              
             -- enter the main loop
-            return ""
-      where
-        disconnect = do
-          s <- modifyMVar state $ \s -> do
-            let s' = removeClient client s
-            return (s', s')
-          broadcast (fst client `mappend` " disconnected") s
+            talk client state
+            
+        where
+          client = (username, conn)
+          disconnect = do
+            s <- modifyMVar state $ \s -> do
+              let s' = removeClient client s
+              return (s', s')
+            broadcast (fst client `mappend` " disconnected") s
+
+checkClient :: Client -> ServerState -> Maybe Text
+checkClient client@(username, _) clients
+  | isInvalidUsername username  = Just (invalidUsernameErrorMessage :: Text)
+  | clientExists client clients = Just (usernameIsTakenErrorMessage :: Text)
+  | otherwise = Nothing
+
 
 talk :: Client -> MVar ServerState -> IO ()
 talk (user, conn) state = forever $ do
-    msg <- WS.receiveData conn
-    readMVar state >>= broadcast
-        (user `mappend` ": " `mappend` msg)
+  msg <- WS.receiveData conn
+  case (eitherDecode msg :: Either String RequestData) of
+    Left errorMsg -> WS.sendTextData conn (T.pack errorMsg)
+    Right (Ping targetId) -> readMVar state >>= broadcast (user `mappend` "pinged " `mappend` (T.pack $ show targetId))
+    Right (Say message)   -> readMVar state >>= broadcast (user `mappend` ": " `mappend` message)
+    
+
