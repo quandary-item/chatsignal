@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
+import Data.Aeson
 import Data.Char (isPunctuation, isSpace)
 import Data.Monoid (mappend)
 import Data.Text (Text)
@@ -10,6 +11,19 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
 import qualified Network.WebSockets as WS
+
+type UserID = Int
+
+data RequestData = Connect Text | Ping UserID | Say Text | Disconnect deriving Show
+instance FromJSON RequestData where
+  parseJSON = withObject "connect or ping or say or disconnect" $ \o -> do
+    action <- o .: "action"
+    case action of
+      "connect"    -> Connect <$> o .: "username"
+      "ping"       -> Ping <$> o .: "target"
+      "say"        -> Say <$> o .: "message"
+      "disconnect" -> pure Disconnect
+      _            -> fail ("unknown action " ++ action)
 
 type Client = (Text, WS.Connection)
 type ServerState = [Client]

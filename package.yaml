@@ -21,6 +21,7 @@ description:         Please see the README on GitHub at <https://github.com/gith
 
 dependencies:
 - base >= 4.7 && < 5
+- aeson
 - mtl
 - network
 - text
@@ -34,7 +35,7 @@ library:
 
 executables:
   chatsignal-exe:
-    main:                Main.lhs
+    main:                Main.hs
     source-dirs:         app
     ghc-options:
     - -Wall
