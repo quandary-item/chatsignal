@@ -84,7 +84,7 @@ application state pending = do
     case (eitherDecode msg :: Either String ConnectRequestData) of
       Left errorMsg -> WS.sendTextData conn (T.pack errorMsg)
       Right (Connect username) -> do
-        case checkClient client clients of 
+        case checkClient client clients of
           Just validationErrorMessage -> WS.sendTextData conn validationErrorMessage
           Nothing -> flip finally disconnect $ do
             -- send a welcome / motd
@@ -97,10 +97,10 @@ application state pending = do
               WS.sendTextData conn $ "Current users: " `mappend` T.intercalate ", " (map fst s)
               broadcast (fst client `mappend` " joined") s'
               return s'
-              
+
             -- enter the main loop
             talk client state
-            
+
         where
           client = (username, conn)
           disconnect = do
@@ -123,5 +123,3 @@ talk (user, conn) state = forever $ do
     Left errorMsg -> WS.sendTextData conn (T.pack errorMsg)
     Right (Ping targetId) -> readMVar state >>= broadcast (user `mappend` "pinged " `mappend` (T.pack $ show targetId))
     Right (Say message)   -> readMVar state >>= broadcast (user `mappend` ": " `mappend` message)
-    
-
