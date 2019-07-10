@@ -90,24 +90,25 @@ application state pending = do
     WS.forkPingThread conn 30
     msg <- WS.receiveData conn
     clients <- readMVar state
+    -- Parse the initial JSON request data
     case (eitherDecode msg :: Either String ConnectRequestData) of
       Left errorMsg -> WS.sendTextData conn (T.pack errorMsg)
       Right (Connect username) -> do
+        -- Check the username is valid and not taken
         case checkClient client clients of
           Just validationErrorMessage -> WS.sendTextData conn validationErrorMessage
           Nothing -> flip finally disconnect $ do
-            -- send a welcome / motd
+            -- Send a welcome / motd
             WS.sendTextData conn ("Welcome to One Hour Chat!" :: Text)
 
-
-            -- create a new user, broadcast the new user list to everyone else
+            -- Create a new user, broadcast the new user list to everyone else
             modifyMVar_ state $ \s -> do
               let s' = addClient client s
               WS.sendTextData conn $ "Current users: " `mappend` T.intercalate ", " (map fst s)
               broadcast (fst client `mappend` " joined") s'
               return s'
 
-            -- enter the main loop
+            -- Enter the main loop
             talk client state
 
         where
