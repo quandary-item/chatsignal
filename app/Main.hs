@@ -128,11 +128,14 @@ checkClient client@(username, _) clients
 talk :: Client -> MVar ServerState -> IO ()
 talk (user, conn) state = forever $ do
   msg <- WS.receiveData conn
+  -- Decode the JSON request data
   case (eitherDecode msg :: Either String RequestData) of
     Left errorMsg -> WS.sendTextData conn (T.pack errorMsg)
-    Right (Ping targetId) -> broadcast' (user `mappend` "pinged " `mappend` (T.pack $ show targetId))
-    Right (Say message)   -> broadcast' (user `mappend` ": " `mappend` message)
+    Right command -> case command of
+      Ping targetId -> broadcast' (user `mappend` "pinged " `mappend` (T.pack $ show targetId))
+      Say message   -> broadcast' (user `mappend` ": " `mappend` message)
   where
+    -- Convenience method for broadcasting data
     broadcast' m = do
       clients <- readMVar state
       broadcast m clients
