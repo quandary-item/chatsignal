@@ -121,5 +121,9 @@ talk (user, conn) state = forever $ do
   msg <- WS.receiveData conn
   case (eitherDecode msg :: Either String RequestData) of
     Left errorMsg -> WS.sendTextData conn (T.pack errorMsg)
-    Right (Ping targetId) -> readMVar state >>= broadcast (user `mappend` "pinged " `mappend` (T.pack $ show targetId))
-    Right (Say message)   -> readMVar state >>= broadcast (user `mappend` ": " `mappend` message)
+    Right (Ping targetId) -> broadcast' (user `mappend` "pinged " `mappend` (T.pack $ show targetId))
+    Right (Say message)   -> broadcast' (user `mappend` ": " `mappend` message)
+  where
+    broadcast' m = do
+      clients <- readMVar state
+      broadcast m clients
