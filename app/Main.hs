@@ -32,6 +32,15 @@ instance FromJSON RequestData where
       "say"        -> Say <$> o .: "message"
       _            -> fail ("unknown action " ++ action)
 
+
+data ResponseData = ServerStateResponse ServerState | ServerMessage Text
+instance Show ResponseData where
+  show (ServerStateResponse clients) = "Clients: " ++ (T.unpack $ T.intercalate (T.pack ", ") $ map fst clients)
+  show (ServerMessage text)          = T.unpack text
+instance ToJSON ResponseData where
+  toJSON (ServerStateResponse clients) = object ["kind" .= ("clients" :: Text), "clients" .= map fst clients]
+  toJSON (ServerMessage text)          = object ["kind" .= ("message" :: Text), "data" .= text]
+
 type Client = (Text, WS.Connection)
 type ServerState = [Client]
 
