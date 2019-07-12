@@ -14,6 +14,13 @@ import qualified Network.WebSockets as WS
 
 type UserID = Int
 
+
+assert :: Bool -> String -> Either String ()
+assert True _  = Right ()
+assert False m = Left m
+
+
+
 data ConnectRequestData = Connect Text deriving Show
 instance FromJSON ConnectRequestData where
   parseJSON = withObject "connect" $ \o -> do
@@ -75,13 +82,13 @@ revMap value = map ($ value)
 isInvalidUsername :: Text -> Bool
 isInvalidUsername username = not $ or (map ($ username) [T.null, T.any isPunctuation, T.any isSpace])
 
-invalidUsernameErrorMessage :: Text
+invalidUsernameErrorMessage :: String
 invalidUsernameErrorMessage = "Username cannot contain punctuation or whitespace, and cannot be empty"
 
 usernameIsTaken :: Text -> ServerState -> Bool
 usernameIsTaken username = any ((== username) . fst)
 
-usernameIsTakenErrorMessage :: Text
+usernameIsTakenErrorMessage :: String
 usernameIsTakenErrorMessage = "Username is already taken by an existing user"
 
 application :: MVar ServerState -> WS.ServerApp
@@ -90,40 +97,38 @@ application state pending = do
     WS.forkPingThread conn 30
     msg <- WS.receiveData conn
     clients <- readMVar state
-    -- Parse the initial JSON request data
-    case (eitherDecode msg :: Either String ConnectRequestData) of
-      Left errorMsg -> WS.sendTextData conn (T.pack errorMsg)
-      Right (Connect username) -> do
-        -- Check the username is valid and not taken
-        case checkClient client clients of
-          Just validationErrorMessage -> WS.sendTextData conn validationErrorMessage
-          Nothing -> flip finally disconnect $ do
-            -- Send a welcome / motd
-            WS.sendTextData conn ("Welcome to One Hour Chat!" :: Text)
 
-            -- Create a new user, broadcast the new user list to everyone else
-            modifyMVar_ state $ \s -> do
-              let s' = addClient client s
-              WS.sendTextData conn $ "Current users: " `mappend` T.intercalate ", " (map fst s)
-              broadcast (fst client `mappend` " joined") s'
-              return s'
+    let result = do
+          command <- (eitherDecode msg :: Either String ConnectRequestData)
+          let (Connect username) = command
+          let client = (username, conn)
+          assert (not $ isInvalidUsername username) invalidUsernameErrorMessage
+          assert (not $ clientExists client clients) usernameIsTakenErrorMessage
+          
+          pure client
+          
+    case result of
+      (Left errorMsg) -> WS.sendTextData conn (T.pack errorMsg)
+      (Right client)  -> flip finally (disconnect client state) $ do
+        -- Send a welcome / motd
+        WS.sendTextData conn ("Welcome to One Hour Chat!" :: Text)
 
-            -- Enter the main loop
-            talk client state
+        -- Create a new user, broadcast the new user list to everyone else
+        modifyMVar_ state $ \s -> do
+          let s' = addClient client s
+          WS.sendTextData conn $ "Current users: " `mappend` T.intercalate ", " (map fst s)
+          broadcast (fst client `mappend` " joined") s'
+          return s'
 
-        where
-          client = (username, conn)
-          disconnect = do
-            s <- modifyMVar state $ \s -> do
-              let s' = removeClient client s
-              return (s', s')
-            broadcast (fst client `mappend` " disconnected") s
+        -- Enter the main loop
+        talk client state
 
-checkClient :: Client -> ServerState -> Maybe Text
-checkClient client@(username, _) clients
-  | isInvalidUsername username  = Just (invalidUsernameErrorMessage :: Text)
-  | clientExists client clients = Just (usernameIsTakenErrorMessage :: Text)
-  | otherwise = Nothing
+disconnect :: Client -> MVar ServerState -> IO ()
+disconnect client state = do
+  s <- modifyMVar state $ \s -> do
+    let s' = removeClient client s
+    return (s', s')
+  broadcast (fst client `mappend` " disconnected") s
 
 
 talk :: Client -> MVar ServerState -> IO ()
