@@ -4,11 +4,11 @@ import Data.Aeson
 import Data.Char (isPunctuation, isSpace)
 import Data.Monoid (mappend)
 import Data.Text (Text)
+import qualified Data.ByteString.Lazy.Char8 as BL
 import Control.Exception (finally)
 import Control.Monad (forM_, forever)
 import Control.Concurrent (MVar, newMVar, modifyMVar_, modifyMVar, readMVar)
 import qualified Data.Text as T
-import qualified Data.Text.IO as T
 
 import qualified Network.WebSockets as WS
 
@@ -18,7 +18,6 @@ type UserID = Int
 assert :: Bool -> String -> Either String ()
 assert True _  = Right ()
 assert False m = Left m
-
 
 
 data ConnectRequestData = Connect Text deriving Show
@@ -66,10 +65,11 @@ addClient client clients = client : clients
 removeClient :: Client -> ServerState -> ServerState
 removeClient client = filter ((/= fst client) . fst)
 
-broadcast :: Text -> ServerState -> IO ()
-broadcast message clients = do
-    T.putStrLn message
+broadcast :: ServerState -> ResponseData -> IO ()
+broadcast clients responseData = do
+    BL.putStrLn message
     forM_ clients $ \(_, conn) -> WS.sendTextData conn message
+    where message = encode responseData
 
 main :: IO ()
 main = do
@@ -101,24 +101,24 @@ disconnect client state = do
   s <- modifyMVar state $ \s -> do
     let s' = removeClient client s
     return (s', s')
-  broadcast (fst client `mappend` " disconnected") s
+  broadcast s $ ServerMessage $ fst client `mappend` " disconnected"
 
 
 talk :: Client -> MVar ServerState -> IO ()
 talk (user, conn) state = forever $ do
   msg <- WS.receiveData conn
-  
+
   -- Decode the JSON request data
   case (eitherDecode msg :: Either String RequestData) of
     Left errorMsg -> WS.sendTextData conn (T.pack errorMsg)
     Right command -> case command of
-      Ping targetId -> broadcast' (user `mappend` "pinged " `mappend` (T.pack $ show targetId))
-      Say message   -> broadcast' (user `mappend` ": " `mappend` message)
+      Ping targetId -> broadcast' $ ServerMessage $ user `mappend` "pinged " `mappend` (T.pack $ show targetId)
+      Say message   -> broadcast' $ ServerMessage $ user `mappend` ": " `mappend` message
   where
     -- Convenience method for broadcasting data
     broadcast' m = do
       clients <- readMVar state
-      broadcast m clients
+      broadcast clients m
 
 
 application :: MVar ServerState -> WS.ServerApp
@@ -136,22 +136,21 @@ application state pending = do
 
           let client = (username, conn)
           assert (not $ clientExists client clients) usernameIsTakenErrorMessage
-          
+
           pure client
-          
+
     case requestDecodeResult of
-      (Left errorMsg) -> WS.sendTextData conn (T.pack errorMsg)
+      (Left errorMsg) -> sendResponse conn $ ServerMessage $ T.pack errorMsg
       (Right client)  -> flip finally (disconnect client state) $ do
         -- Send a welcome / motd
-        WS.sendTextData conn ("Welcome to One Hour Chat!" :: Text)
+        sendResponse conn $ ServerMessage "Welcome to One Hour Chat!"
 
         -- Create a new user, broadcast the new user list to everyone else
         modifyMVar_ state $ \s -> do
           let s' = addClient client s
-          WS.sendTextData conn $ "Current users: " `mappend` T.intercalate ", " (map fst s)
-          broadcast (fst client `mappend` " joined") s'
+          broadcast s' $ ServerMessage $ fst client `mappend` " joined"
+          sendResponse conn $ ServerStateResponse s'
           return s'
 
         -- Enter the main loop
         talk client state
-
