@@ -71,10 +71,6 @@ broadcast clients responseData = do
     forM_ clients $ \(_, conn) -> WS.sendTextData conn message
     where message = encode responseData
 
-main :: IO ()
-main = do
-    state <- newMVar newServerState
-    WS.runServer "127.0.0.1" 9160 $ application state
 
 revMap :: a -> [a -> b] -> [b]
 revMap value = map ($ value)
@@ -154,3 +150,9 @@ application state pending = do
 
         -- Enter the main loop
         talk client state
+
+
+main :: IO ()
+main = do
+    state <- newMVar newServerState
+    WS.runServer "127.0.0.1" 9160 $ application state
