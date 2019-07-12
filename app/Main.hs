@@ -100,9 +100,11 @@ application state pending = do
 
     let requestDecodeResult = do
           command <- (eitherDecode msg :: Either String ConnectRequestData)
+
           let (Connect username) = command
-          let client = (username, conn)
           assert (not $ isInvalidUsername username) invalidUsernameErrorMessage
+
+          let client = (username, conn)
           assert (not $ clientExists client clients) usernameIsTakenErrorMessage
           
           pure client
