@@ -91,6 +91,36 @@ usernameIsTaken username = any ((== username) . fst)
 usernameIsTakenErrorMessage :: String
 usernameIsTakenErrorMessage = "Username is already taken by an existing user"
 
+
+sendResponse :: WS.Connection -> ResponseData -> IO ()
+sendResponse conn responseData = WS.sendTextData conn (encode responseData)
+
+
+disconnect :: Client -> MVar ServerState -> IO ()
+disconnect client state = do
+  s <- modifyMVar state $ \s -> do
+    let s' = removeClient client s
+    return (s', s')
+  broadcast (fst client `mappend` " disconnected") s
+
+
+talk :: Client -> MVar ServerState -> IO ()
+talk (user, conn) state = forever $ do
+  msg <- WS.receiveData conn
+  
+  -- Decode the JSON request data
+  case (eitherDecode msg :: Either String RequestData) of
+    Left errorMsg -> WS.sendTextData conn (T.pack errorMsg)
+    Right command -> case command of
+      Ping targetId -> broadcast' (user `mappend` "pinged " `mappend` (T.pack $ show targetId))
+      Say message   -> broadcast' (user `mappend` ": " `mappend` message)
+  where
+    -- Convenience method for broadcasting data
+    broadcast' m = do
+      clients <- readMVar state
+      broadcast m clients
+
+
 application :: MVar ServerState -> WS.ServerApp
 application state pending = do
     conn <- WS.acceptRequest pending
@@ -125,25 +155,3 @@ application state pending = do
         -- Enter the main loop
         talk client state
 
-disconnect :: Client -> MVar ServerState -> IO ()
-disconnect client state = do
-  s <- modifyMVar state $ \s -> do
-    let s' = removeClient client s
-    return (s', s')
-  broadcast (fst client `mappend` " disconnected") s
-
-
-talk :: Client -> MVar ServerState -> IO ()
-talk (user, conn) state = forever $ do
-  msg <- WS.receiveData conn
-  -- Decode the JSON request data
-  case (eitherDecode msg :: Either String RequestData) of
-    Left errorMsg -> WS.sendTextData conn (T.pack errorMsg)
-    Right command -> case command of
-      Ping targetId -> broadcast' (user `mappend` "pinged " `mappend` (T.pack $ show targetId))
-      Say message   -> broadcast' (user `mappend` ": " `mappend` message)
-  where
-    -- Convenience method for broadcasting data
-    broadcast' m = do
-      clients <- readMVar state
-      broadcast m clients
