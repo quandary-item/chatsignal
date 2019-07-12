@@ -98,7 +98,7 @@ application state pending = do
     msg <- WS.receiveData conn
     clients <- readMVar state
 
-    let result = do
+    let requestDecodeResult = do
           command <- (eitherDecode msg :: Either String ConnectRequestData)
           let (Connect username) = command
           let client = (username, conn)
@@ -107,7 +107,7 @@ application state pending = do
           
           pure client
           
-    case result of
+    case requestDecodeResult of
       (Left errorMsg) -> WS.sendTextData conn (T.pack errorMsg)
       (Right client)  -> flip finally (disconnect client state) $ do
         -- Send a welcome / motd
