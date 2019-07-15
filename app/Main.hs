@@ -10,7 +10,7 @@ import Data.UUID.V4 (nextRandom)
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Control.Exception (finally)
 import Control.Monad (forM_, forever)
-import Control.Concurrent (MVar, newMVar, modifyMVar_, modifyMVar, readMVar)
+import Control.Concurrent (MVar, newMVar, modifyMVar, readMVar)
 import qualified Data.Text as T
 
 import qualified Network.WebSockets as WS
