@@ -38,7 +38,7 @@ instance FromJSON RequestData where
     action <- o .: "action"
     case action of
       "ping"       -> Ping <$> o .: "target"
-      "say"        -> Say <$> o .: "message"
+      "say"        -> Say  <$> o .: "message"
       _            -> fail ("unknown action " ++ action)
 
 
@@ -48,13 +48,13 @@ instance Show ResponseData where
   show (ServerMessage text)          = "Message: " ++ T.unpack text
   show (ConnectionNotify userId')    = "Notify: "  ++ show userId'
 instance ToJSON ResponseData where
-  toJSON (ServerStateResponse clients) = object [ "kind" .= ("clients" :: Text)
+  toJSON (ServerStateResponse clients) = object [ "kind"    .= ("clients" :: Text)
                                                 , "clients" .= Map.toList clients
                                                 ]
   toJSON (ServerMessage text)          = object [ "kind" .= ("message" :: Text)
-                                                ,  "data" .= text
+                                                , "data" .= text
                                                 ]
-  toJSON (ConnectionNotify userId')    = object [ "kind" .= ("notify" :: Text)
+  toJSON (ConnectionNotify userId')    = object [ "kind"    .= ("notify" :: Text)
                                                 , "user_id" .= show userId'
                                                 ]
 
