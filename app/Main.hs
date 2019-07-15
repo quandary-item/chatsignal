@@ -72,11 +72,8 @@ broadcast clients responseData = do
     where message = encode responseData
 
 
-revMap :: a -> [a -> b] -> [b]
-revMap value = map ($ value)
-
-isInvalidUsername :: Text -> Bool
-isInvalidUsername username = not $ or (map ($ username) [T.null, T.any isPunctuation, T.any isSpace])
+isValidUsername :: Text -> Bool
+isValidUsername username = not $ or (map ($ username) [T.null, T.any isPunctuation, T.any isSpace])
 
 invalidUsernameErrorMessage :: String
 invalidUsernameErrorMessage = "Username cannot contain punctuation or whitespace, and cannot be empty"
@@ -108,7 +105,7 @@ talk (user, conn) state = forever $ do
   case (eitherDecode msg :: Either String RequestData) of
     Left errorMsg -> WS.sendTextData conn (T.pack errorMsg)
     Right command -> case command of
-      Ping targetId -> broadcast' $ ServerMessage $ user `mappend` "pinged " `mappend` (T.pack $ show targetId)
+      Ping targetId -> broadcast' $ ServerMessage $ user `mappend` " pinged " `mappend` (T.pack $ show targetId)
       Say message   -> broadcast' $ ServerMessage $ user `mappend` ": " `mappend` message
   where
     -- Convenience method for broadcasting data
@@ -123,12 +120,13 @@ application state pending = do
     WS.forkPingThread conn 30
     msg <- WS.receiveData conn
     clients <- readMVar state
-
+    BL.putStrLn msg
+    
     let requestDecodeResult = do
           command <- (eitherDecode msg :: Either String ConnectRequestData)
 
           let (Connect username) = command
-          assert (not $ isInvalidUsername username) invalidUsernameErrorMessage
+          assert (isValidUsername username) invalidUsernameErrorMessage
 
           let client = (username, conn)
           assert (not $ clientExists client clients) usernameIsTakenErrorMessage
