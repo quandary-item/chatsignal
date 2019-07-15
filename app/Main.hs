@@ -130,7 +130,11 @@ talk client state = forever $ do
   case requestDecodeResult of
     Left errorMsg -> sendResponse (connection client) $ ServerMessage $ T.pack errorMsg
     Right command -> case command of
-      Ping targetId -> broadcast' $ ServerMessage $ username client `mappend` " pinged " `mappend` (T.pack $ show targetId)
+      Ping targetId -> do
+        clients <- readMVar state
+        case Map.lookup targetId clients of
+          (Nothing)         -> return ()
+          (Just targetUser) -> broadcast' $ ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser
       Say message   -> broadcast' $ ServerMessage $ username client `mappend` ": " `mappend` message
   where
     -- Convenience method for broadcasting data
