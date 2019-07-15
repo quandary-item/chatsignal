@@ -42,16 +42,20 @@ instance FromJSON RequestData where
       _            -> fail ("unknown action " ++ action)
 
 
-data ResponseData = ServerStateResponse ServerState | ServerMessage Text
+data ResponseData = ServerStateResponse ServerState | ServerMessage Text | ConnectionNotify UserID
 instance Show ResponseData where
   show (ServerStateResponse clients) = "Clients: " ++ (T.unpack $ T.intercalate ", " $ map (T.pack . show . fst) $ Map.toList clients)
-  show (ServerMessage text)          = T.unpack text
+  show (ServerMessage text)          = "Message: " ++ T.unpack text
+  show (ConnectionNotify userId')    = "Notify: "  ++ show userId'
 instance ToJSON ResponseData where
   toJSON (ServerStateResponse clients) = object [ "kind" .= ("clients" :: Text)
                                                 , "clients" .= Map.toList clients
                                                 ]
   toJSON (ServerMessage text)          = object [ "kind" .= ("message" :: Text)
                                                 ,  "data" .= text
+                                                ]
+  toJSON (ConnectionNotify userId')    = object [ "kind" .= ("notify" :: Text)
+                                                , "user_id" .= show userId'
                                                 ]
 
 data Client = Client { username :: Text, userId :: UserID, connection :: WS.Connection }
