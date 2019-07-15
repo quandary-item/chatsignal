@@ -23,11 +23,13 @@ dependencies:
 - base >= 4.7 && < 5
 - aeson
 - bytestring
+- containers
 - mtl
 - network
 - text
 - snap-core
 - snap-server
+- uuid
 - websockets
 - websockets-snap
 
