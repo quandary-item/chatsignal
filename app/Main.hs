@@ -101,9 +101,14 @@ talk :: Client -> MVar ServerState -> IO ()
 talk (user, conn) state = forever $ do
   msg <- WS.receiveData conn
 
+  -- use either monad wahoo
+  let requestDecodeResult = do
+        command <- (eitherDecode msg :: Either String RequestData)
+        pure command
+
   -- Decode the JSON request data
-  case (eitherDecode msg :: Either String RequestData) of
-    Left errorMsg -> WS.sendTextData conn (T.pack errorMsg)
+  case requestDecodeResult of
+    Left errorMsg -> sendResponse conn $ ServerMessage $ T.pack errorMsg
     Right command -> case command of
       Ping targetId -> broadcast' $ ServerMessage $ user `mappend` " pinged " `mappend` (T.pack $ show targetId)
       Say message   -> broadcast' $ ServerMessage $ user `mappend` ": " `mappend` message
