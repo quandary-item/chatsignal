@@ -148,7 +148,7 @@ application state pending = do
         modifyMVar_ state $ \s -> do
           let s' = addClient client s
           broadcast s' $ ServerMessage $ fst client `mappend` " joined"
-          sendResponse conn $ ServerStateResponse s'
+          broadcast s' $ ServerStateResponse s'
           return s'
 
         -- Enter the main loop
