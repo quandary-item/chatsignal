@@ -44,13 +44,15 @@ instance FromJSON RequestData where
 
 data ResponseData = ServerStateResponse ServerState | ServerMessage Text
 instance Show ResponseData where
-  show (ServerStateResponse clients) = "Clients: " ++ (T.unpack $ T.intercalate (T.pack ", ") $ map (T.pack . show . fst) $ Map.toList clients)
+  show (ServerStateResponse clients) = "Clients: " ++ (T.unpack $ T.intercalate ", " $ map (T.pack . show . fst) $ Map.toList clients)
   show (ServerMessage text)          = T.unpack text
 instance ToJSON ResponseData where
   toJSON (ServerStateResponse clients) = object [ "kind" .= ("clients" :: Text)
                                                 , "clients" .= Map.toList clients
                                                 ]
-  toJSON (ServerMessage text)          = object ["kind" .= ("message" :: Text), "data" .= text]
+  toJSON (ServerMessage text)          = object [ "kind" .= ("message" :: Text)
+                                                ,  "data" .= text
+                                                ]
 
 data Client = Client { username :: Text, userId :: UserID, connection :: WS.Connection }
 
