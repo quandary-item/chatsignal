@@ -49,7 +49,7 @@ instance Show ResponseData where
   show (ConnectionNotify userId')    = "Notify: "  ++ show userId'
 instance ToJSON ResponseData where
   toJSON (ServerStateResponse clients) = object [ "kind"    .= ("clients" :: Text)
-                                                , "clients" .= Map.toList clients
+                                                , "clients" .= map snd (Map.toList clients)
                                                 ]
   toJSON (ServerMessage text)          = object [ "kind" .= ("message" :: Text)
                                                 , "data" .= text
