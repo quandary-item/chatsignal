@@ -165,6 +165,8 @@ application state pending = do
       (Right client)  -> flip finally (disconnect newUserId state) $ do
         -- Send a welcome / motd
         sendResponse conn $ ServerMessage "Welcome to One Hour Chat!"
+        -- Tell the client what their user id is
+        sendResponse conn $ ConnectionNotify newUserId
 
         -- Add the new client to the state
         newClients <- modifyMVar state $ \s -> do
