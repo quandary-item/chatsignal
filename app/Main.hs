@@ -147,9 +147,6 @@ application state pending = do
     clients <- readMVar state
     BL.putStrLn msg
 
-    -- Create a user id
-    newUserId <- makeRandomUserID
-
     let requestDecodeResult = do
           command <- (eitherDecode msg :: Either String ConnectRequestData)
 
@@ -158,11 +155,16 @@ application state pending = do
 
           assert (not $ clientExistsWithUsername providedUsername clients) usernameIsTakenErrorMessage
 
-          pure (Client {username = providedUsername, userId = newUserId, connection = conn})
+          pure providedUsername
 
     case requestDecodeResult of
       (Left errorMsg) -> sendResponse conn $ ServerMessage $ T.pack errorMsg
-      (Right client)  -> flip finally (disconnect newUserId state) $ do
+      (Right providedUsername)  -> do
+        -- Create a user id
+        newUserId <- makeRandomUserID
+        -- Create the actual client
+        let client = Client { username = providedUsername, userId = newUserId, connection = conn }
+        flip finally (disconnect newUserId state) $ do
         -- Send a welcome / motd
         sendResponse conn $ ServerMessage "Welcome to One Hour Chat!"
         -- Tell the client what their user id is
