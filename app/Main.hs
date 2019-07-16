@@ -4,7 +4,6 @@ import Data.Aeson
 import Data.Char (isPunctuation, isSpace)
 import qualified Data.Map.Strict as Map
 import Data.Monoid (mappend)
-import Data.Text (Text)
 import Data.UUID (UUID)
 import Data.UUID.V4 (nextRandom)
 import qualified Data.ByteString.Lazy.Char8 as BL
@@ -23,7 +22,7 @@ assert True _  = Right ()
 assert False m = Left m
 
 
-data ConnectRequestData = Connect Text deriving Show
+data ConnectRequestData = Connect T.Text deriving Show
 instance FromJSON ConnectRequestData where
   parseJSON = withObject "connect" $ \o -> do
     action <- o .: "action"
@@ -32,7 +31,7 @@ instance FromJSON ConnectRequestData where
       _            -> fail ("unknown action " ++ action)
 
 
-data RequestData = Ping UserID | Say Text deriving Show
+data RequestData = Ping UserID | Say T.Text deriving Show
 instance FromJSON RequestData where
   parseJSON = withObject "ping or say" $ \o -> do
     action <- o .: "action"
@@ -42,23 +41,23 @@ instance FromJSON RequestData where
       _            -> fail ("unknown action " ++ action)
 
 
-data ResponseData = ServerStateResponse ServerState | ServerMessage Text | ConnectionNotify UserID
+data ResponseData = ServerStateResponse ServerState | ServerMessage T.Text | ConnectionNotify UserID
 instance Show ResponseData where
   show (ServerStateResponse clients) = "Clients: " ++ (T.unpack $ T.intercalate ", " $ map (T.pack . show . fst) $ Map.toList clients)
   show (ServerMessage text)          = "Message: " ++ T.unpack text
   show (ConnectionNotify userId')    = "Notify: "  ++ show userId'
 instance ToJSON ResponseData where
-  toJSON (ServerStateResponse clients) = object [ "kind"    .= ("clients" :: Text)
+  toJSON (ServerStateResponse clients) = object [ "kind"    .= ("clients" :: T.Text)
                                                 , "clients" .= map snd (Map.toList clients)
                                                 ]
-  toJSON (ServerMessage text)          = object [ "kind" .= ("message" :: Text)
+  toJSON (ServerMessage text)          = object [ "kind" .= ("message" :: T.Text)
                                                 , "data" .= text
                                                 ]
-  toJSON (ConnectionNotify userId')    = object [ "kind"    .= ("notify" :: Text)
+  toJSON (ConnectionNotify userId')    = object [ "kind"    .= ("notify" :: T.Text)
                                                 , "user_id" .= show userId'
                                                 ]
 
-data Client = Client { username :: Text, userId :: UserID, connection :: WS.Connection }
+data Client = Client { username :: T.Text, userId :: UserID, connection :: WS.Connection }
 
 instance ToJSON Client where
   toJSON client = object [ "username" .= username client
@@ -73,7 +72,7 @@ newServerState = Map.empty
 numClients :: ServerState -> Int
 numClients = Map.size
 
-clientExistsWithUsername :: Text -> ServerState -> Bool
+clientExistsWithUsername :: T.Text -> ServerState -> Bool
 clientExistsWithUsername username' serverState = (Map.size matchingClients) > 0
   where matchingClients = Map.filter ((== username') . username) serverState
 
@@ -90,7 +89,7 @@ broadcast clients responseData = do
     where message = encode responseData
 
 
-isValidUsername :: Text -> Bool
+isValidUsername :: T.Text -> Bool
 isValidUsername providedUsername = not $ or (map ($ providedUsername) [T.null, T.any isPunctuation, T.any isSpace])
 
 invalidUsernameErrorMessage :: String
