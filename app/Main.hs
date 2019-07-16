@@ -4,8 +4,6 @@ import Data.Aeson
 import Data.Char (isPunctuation, isSpace)
 import qualified Data.Map.Strict as Map
 import Data.Monoid (mappend)
-import Data.UUID (UUID)
-import Data.UUID.V4 (nextRandom)
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Control.Exception (finally)
 import Control.Monad (forM_, forever)
@@ -14,10 +12,7 @@ import qualified Data.Text as T
 
 import qualified Network.WebSockets as WS
 
-type UserID = UUID
-
-makeRandomUserID :: IO UserID
-makeRandomUserID = nextRandom
+import UserID (UserID, makeRandomUserID)
 
 assert :: Bool -> String -> Either String ()
 assert True _  = Right ()
