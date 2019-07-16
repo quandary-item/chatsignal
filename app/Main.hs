@@ -16,6 +16,8 @@ import qualified Network.WebSockets as WS
 
 type UserID = UUID
 
+makeRandomUserID :: IO UserID
+makeRandomUserID = nextRandom
 
 assert :: Bool -> String -> Either String ()
 assert True _  = Right ()
@@ -151,7 +153,7 @@ application state pending = do
     BL.putStrLn msg
 
     -- Create a user id
-    newUserId <- nextRandom
+    newUserId <- makeRandomUserID
 
     let requestDecodeResult = do
           command <- (eitherDecode msg :: Either String ConnectRequestData)
