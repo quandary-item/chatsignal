@@ -114,7 +114,7 @@ disconnect userId' state = do
 
 
 talk :: Client -> MVar ServerState -> IO ()
-talk client state = forever $ do
+talk client state = do
   msg <- WS.receiveData (connection client)
 
   -- use either monad wahoo
@@ -164,23 +164,29 @@ application state pending = do
         newUserId <- makeRandomUserID
         -- Create the actual client
         let client = Client { username = providedUsername, userId = newUserId, connection = conn }
+        -- When the connection ends, run `disconnect`
         flip finally (disconnect newUserId state) $ do
-        -- Send a welcome / motd
-        sendResponse conn $ ServerMessage "Welcome to One Hour Chat!"
-        -- Tell the client what their user id is
-        sendResponse conn $ ConnectionNotify newUserId
+          -- Connect the client
+          connectClient client state
+          -- Serve subsequent requests for this client
+          forever $ talk client state
 
-        -- Add the new client to the state
-        newClients <- modifyMVar state $ \s -> do
-          let s' = addClient newUserId client s
-          return (s', s')
 
-        -- Notify everyone that the party has officially started
-        broadcast newClients $ ServerMessage $ username client `mappend` " joined"
-        broadcast newClients $ ServerStateResponse newClients
+connectClient :: Client -> MVar ServerState -> IO ()
+connectClient client serverState = do
+  -- Send a welcome / motd
+  sendResponse (connection client) $ ServerMessage "Welcome to One Hour Chat!"
+  -- Tell the client what their user id is
+  sendResponse (connection client) $ ConnectionNotify (userId client)
 
-        -- Enter the main loop
-        talk client state
+  -- Add the new client to the state
+  newClients <- modifyMVar serverState $ \s -> do
+    let s' = addClient (userId client) client s
+    return (s', s')
+
+  -- Notify everyone that the party has officially started
+  broadcast newClients $ ServerMessage $ username client `mappend` " joined"
+  broadcast newClients $ ServerStateResponse newClients
 
 
 main :: IO ()
