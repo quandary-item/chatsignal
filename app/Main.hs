@@ -73,8 +73,8 @@ clientExistsWithUsername :: T.Text -> ServerState -> Bool
 clientExistsWithUsername username' serverState = (Map.size matchingClients) > 0
   where matchingClients = Map.filter ((== username') . username) serverState
 
-addClient :: UserID -> Client -> ServerState -> ServerState
-addClient = Map.insert
+addClient :: Client -> ServerState -> ServerState
+addClient client = Map.insert (userId client) client
 
 removeClient :: UserID -> ServerState -> ServerState
 removeClient = Map.delete
@@ -181,7 +181,7 @@ connectClient client serverState = do
 
   -- Add the new client to the state
   newClients <- modifyMVar serverState $ \s -> do
-    let s' = addClient (userId client) client s
+    let s' = addClient client s
     return (s', s')
 
   -- Notify everyone that the party has officially started
