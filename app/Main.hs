@@ -113,30 +113,41 @@ disconnect userId' state = do
       broadcast s $ ServerMessage $ username client `mappend` " disconnected"
 
 
+performRequestData :: RequestData -> Client -> MVar ServerState -> IO ()
+performRequestData (Ping targetId) client state = do
+  clients <- readMVar state
+  case Map.lookup targetId clients of
+    (Nothing)         -> return ()
+    (Just targetUser) -> broadcast clients $ ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser
+performRequestData (Say message) client state = do
+  clients <- readMVar state
+  broadcast clients $ ServerMessage $ username client `mappend` ": " `mappend` message
+
+
+-- we don't have any validations for this request type - yet!
+validateRequestData :: ServerState -> RequestData -> Either String ()
+validateRequestData _ _ = pure ()
+
+
+validateTalk :: ServerState -> BL.ByteString -> Either String RequestData
+validateTalk clients msg = do
+  -- decode the request
+  command <- (eitherDecode msg :: Either String RequestData)
+  -- do any validation specific to say/ping/etc
+  validateRequestData clients command
+  -- if successful, return the command
+  pure command
+
+
 talk :: Client -> MVar ServerState -> IO ()
 talk client state = do
   msg <- WS.receiveData (connection client)
 
-  -- use either monad wahoo
-  let requestDecodeResult = do
-        command <- (eitherDecode msg :: Either String RequestData)
-        pure command
+  clients <- readMVar state
 
-  -- Decode the JSON request data
-  case requestDecodeResult of
+  case (validateTalk clients msg) of
     Left errorMsg -> sendResponse (connection client) $ ServerMessage $ T.pack errorMsg
-    Right command -> case command of
-      Ping targetId -> do
-        clients <- readMVar state
-        case Map.lookup targetId clients of
-          (Nothing)         -> return ()
-          (Just targetUser) -> broadcast' $ ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser
-      Say message   -> broadcast' $ ServerMessage $ username client `mappend` ": " `mappend` message
-  where
-    -- Convenience method for broadcasting data
-    broadcast' m = do
-      clients <- readMVar state
-      broadcast clients m
+    Right command -> performRequestData command client state
 
 
 performConnectRequestData :: ConnectRequestData -> WS.Connection -> MVar ServerState -> IO ()
