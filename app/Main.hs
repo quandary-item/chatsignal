@@ -68,9 +68,9 @@ instance Action RequestData where
 
 data Response = Response ResponseData | Broadcast ResponseData
 
-sendResponse' :: Client -> ServerState -> Response -> IO ()
-sendResponse' client _       (Response r ) = sendSingleResponse (connection client) r
-sendResponse' _      clients (Broadcast r) = sendBroadcastResponse clients r
+sendResponse :: Client -> ServerState -> Response -> IO ()
+sendResponse client _       (Response r ) = sendSingleResponse (connection client) r
+sendResponse _      clients (Broadcast r) = sendBroadcastResponse clients r
 
 sendSingleResponse :: WS.Connection -> ResponseData -> IO ()
 sendSingleResponse conn responseData = do
@@ -170,7 +170,7 @@ talk client state = do
         Right command -> execWriter (performRequestData command client clients)
 
   -- send the response/broadcasts
-  mapM_ (sendResponse' client clients) responses
+  mapM_ (sendResponse client clients) responses
 
 
 performConnectRequestData :: ConnectRequestData -> WS.Connection -> MVar ServerState -> IO ()
@@ -191,7 +191,7 @@ serveConnection client state = do
 
   -- Send the responses to the clients/peers
   newClients <- readMVar state
-  let respond = sendResponse' client newClients
+  let respond = sendResponse client newClients
   mapM_ respond responses
 
   -- Serve subsequent requests for this client
