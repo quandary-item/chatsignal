@@ -139,16 +139,20 @@ talk client state = do
       broadcast clients m
 
 
-validationConnect :: ServerState -> BL.ByteString -> Either String T.Text
-validationConnect clients msg = do
-  command <- (eitherDecode msg :: Either String ConnectRequestData)
-
-  let (Connect providedUsername) = command
+validateConnectRequestData :: ServerState -> ConnectRequestData -> Either String ()
+validateConnectRequestData clients (Connect providedUsername) = do
   assert (isValidUsername providedUsername) invalidUsernameErrorMessage
-
   assert (not $ clientExistsWithUsername providedUsername clients) usernameIsTakenErrorMessage
 
-  pure providedUsername
+
+validateConnect :: ServerState -> BL.ByteString -> Either String ConnectRequestData
+validateConnect clients msg = do
+  -- decode the request
+  command <- (eitherDecode msg :: Either String ConnectRequestData)
+  -- do any validation specific to 'connect'
+  validateConnectRequestData clients command
+  -- if successful, return the command
+  pure command
 
 
 application :: MVar ServerState -> WS.ServerApp
@@ -159,11 +163,11 @@ application state pending = do
     clients <- readMVar state
     BL.putStrLn msg
 
-    let requestDecodeResult = validationConnect clients msg
+    let requestDecodeResult = validateConnect clients msg
 
     case requestDecodeResult of
       (Left errorMsg) -> sendResponse conn $ ServerMessage $ T.pack errorMsg
-      (Right providedUsername)  -> do
+      (Right (Connect providedUsername))  -> do
         -- Create a user id
         newUserId <- makeRandomUserID
         -- Create the actual client
