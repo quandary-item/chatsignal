@@ -7,8 +7,8 @@ import Data.Char (isPunctuation, isSpace)
 import qualified Data.Map.Strict as Map
 import Data.Monoid (mappend)
 import qualified Data.ByteString.Lazy.Char8 as BL
-import Control.Exception (finally)
 import Control.Monad (forM_, forever)
+import Control.Monad.Catch (finally)
 import Control.Monad.Except (liftEither, MonadError)
 import Control.Monad.Identity (Identity)
 import Control.Monad.Writer.Strict
