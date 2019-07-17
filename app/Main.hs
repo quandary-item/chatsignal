@@ -64,6 +64,13 @@ instance Action RequestData where
   validate _ = pure ()
 
 
+data Response = Response ResponseData | Broadcast ResponseData
+
+sendResponse' :: Client -> ServerState -> Response -> IO ()
+sendResponse' client _       (Response r ) = sendResponse (connection client) r
+sendResponse' _      clients (Broadcast r) = broadcast clients r
+
+
 data ResponseData = ServerStateResponse ServerState | ServerMessage T.Text | ConnectionNotify UserID
 instance Show ResponseData where
   show (ServerStateResponse clients) = "Clients: " ++ (T.unpack $ T.intercalate ", " $ map (T.pack . show . fst) $ Map.toList clients)
