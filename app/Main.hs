@@ -69,8 +69,20 @@ instance Action RequestData where
 data Response = Response ResponseData | Broadcast ResponseData
 
 sendResponse' :: Client -> ServerState -> Response -> IO ()
-sendResponse' client _       (Response r ) = sendResponse (connection client) r
-sendResponse' _      clients (Broadcast r) = broadcast clients r
+sendResponse' client _       (Response r ) = sendSingleResponse (connection client) r
+sendResponse' _      clients (Broadcast r) = sendBroadcastResponse clients r
+
+sendSingleResponse :: WS.Connection -> ResponseData -> IO ()
+sendSingleResponse conn responseData = do
+  BL.putStrLn message
+  WS.sendTextData conn message
+  where message = encode responseData
+
+sendBroadcastResponse :: ServerState -> ResponseData -> IO ()
+sendBroadcastResponse clients responseData = do
+  BL.putStrLn message
+  forM_ clients $ \client -> WS.sendTextData (connection client) message
+  where message = encode responseData
 
 
 data ResponseData = ServerStateResponse ServerState | ServerMessage T.Text | ConnectionNotify UserID
@@ -114,12 +126,6 @@ addClient client = Map.insert (userId client) client
 removeClient :: UserID -> ServerState -> ServerState
 removeClient = Map.delete
 
-broadcast :: ServerState -> ResponseData -> IO ()
-broadcast clients responseData = do
-    BL.putStrLn message
-    forM_ clients $ \client -> WS.sendTextData (connection client) message
-    where message = encode responseData
-
 
 isValidUsername :: T.Text -> Bool
 isValidUsername providedUsername = not $ or (map ($ providedUsername) [T.null, T.any isPunctuation, T.any isSpace])
@@ -129,10 +135,6 @@ invalidUsernameErrorMessage = "Username cannot contain punctuation or whitespace
 
 usernameIsTakenErrorMessage :: String
 usernameIsTakenErrorMessage = "Username is already taken by an existing user"
-
-
-sendResponse :: WS.Connection -> ResponseData -> IO ()
-sendResponse conn responseData = WS.sendTextData conn (encode responseData)
 
 
 disconnect :: UserID -> MVar ServerState -> IO ()
@@ -145,7 +147,7 @@ disconnect userId' state = do
       s <- modifyMVar state $ \s -> do
         let s' = removeClient userId' s
         return (s', s')
-      broadcast s $ ServerMessage $ username client `mappend` " disconnected"
+      sendBroadcastResponse s $ ServerMessage $ username client `mappend` " disconnected"
 
 
 performRequestData :: (Monad m) => RequestData -> Client -> ServerState -> WriterT [Response] m ()
@@ -215,7 +217,7 @@ application state pending = do
     BL.putStrLn msg
 
     case runReaderT (ingestData msg) clients of
-      Left errorMsg -> sendResponse conn $ ServerMessage $ T.pack errorMsg
+      Left errorMsg -> sendSingleResponse conn $ ServerMessage $ T.pack errorMsg
       Right command -> performConnectRequestData command conn state
 
 
