@@ -204,11 +204,11 @@ connectClient client clients = do
 serveConnection :: Client -> MVar ServerState -> IO ()
 serveConnection client state = do
   -- Connect the client while collecting response messages
-  responses <- modifyMVar state $ \clients ->
-    (pure . runWriter) $ connectClient client clients
+  (responses, newClients) <- modifyMVar state $ \clients -> do
+    let (newClients, responses) = runWriter $ connectClient client clients
+    pure (newClients, (responses, newClients))
 
   -- Send the responses to the clients/peers
-  newClients <- readMVar state
   let respond = sendResponse client newClients
   mapM_ respond responses
 
