@@ -179,8 +179,15 @@ performConnectRequestData (Connect providedUsername) conn state = do
   let client = Client { username = providedUsername, userId = newUserId, connection = conn }
   -- When the connection ends, run `disconnect`
   flip finally (disconnect newUserId state) $ do
-    -- Connect the client
-    connectClient client state
+    -- Connect the client while collecting response messages
+    responses <- modifyMVar state $ \clients ->
+      (pure . runWriter) $ connectClient client clients
+
+    -- Send the responses to the clients/peers
+    newClients <- readMVar state
+    let respond = sendResponse' client newClients
+    mapM_ respond responses
+
     -- Serve subsequent requests for this client
     forever $ talk client state
 
@@ -203,26 +210,27 @@ application state pending = do
     clients <- readMVar state
     BL.putStrLn msg
 
-    case runReaderT (ingestData msg) clients  of
+    case runReaderT (ingestData msg) clients of
       Left errorMsg -> sendResponse conn $ ServerMessage $ T.pack errorMsg
       Right command -> performConnectRequestData command conn state
 
 
-connectClient :: Client -> MVar ServerState -> IO ()
-connectClient client serverState = do
+connectClient :: Client -> ServerState -> WriterT [Response] Identity ServerState
+connectClient client clients = do
   -- Send a welcome / motd
-  sendResponse (connection client) $ ServerMessage "Welcome to One Hour Chat!"
+  tell [Response $ ServerMessage "Welcome to One Hour Chat!"]
   -- Tell the client what their user id is
-  sendResponse (connection client) $ ConnectionNotify (userId client)
+  tell [Response $ ConnectionNotify (userId client)]
 
   -- Add the new client to the state
-  newClients <- modifyMVar serverState $ \s -> do
-    let s' = addClient client s
-    return (s', s')
+  let newClients = addClient client clients
 
   -- Notify everyone that the party has officially started
-  broadcast newClients $ ServerMessage $ username client `mappend` " joined"
-  broadcast newClients $ ServerStateResponse newClients
+  tell [Broadcast $ ServerMessage $ username client `mappend` " joined"]
+  tell [Broadcast $  ServerStateResponse newClients]
+
+  -- return the updated list of clients
+  pure newClients
 
 
 main :: IO ()
