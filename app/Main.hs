@@ -150,17 +150,12 @@ performRequestData (Say message) client state = do
   broadcast clients $ ServerMessage $ username client `mappend` ": " `mappend` message
 
 
--- we don't have any validations for this request type - yet!
-validateRequestData :: ServerState -> RequestData -> Either String ()
-validateRequestData _ _ = pure ()
-
-
-validateTalk :: ServerState -> BL.ByteString -> Either String RequestData
-validateTalk clients msg = do
+validateTalk :: BL.ByteString -> Validation RequestData
+validateTalk msg = do
   -- decode the request
-  command <- (eitherDecode msg :: Either String RequestData)
+  command <- liftEither . eitherDecode $ msg
   -- do any validation specific to say/ping/etc
-  validateRequestData clients command
+  validate command
   -- if successful, return the command
   pure command
 
@@ -171,7 +166,7 @@ talk client state = do
 
   clients <- readMVar state
 
-  case validateTalk clients msg of
+  case runReaderT (validateTalk msg) clients of
     Left errorMsg -> sendResponse (connection client) $ ServerMessage $ T.pack errorMsg
     Right command -> performRequestData command client state
 
@@ -190,20 +185,12 @@ performConnectRequestData (Connect providedUsername) conn state = do
     forever $ talk client state
 
 
-validateConnectRequestData :: ConnectRequestData -> Validation ()
-validateConnectRequestData (Connect providedUsername) = do
-  clients <- ask
-
-  assertM invalidUsernameErrorMessage $ isValidUsername providedUsername
-  assertM usernameIsTakenErrorMessage $ not $ clientExistsWithUsername providedUsername clients
-
-
 validateConnect :: BL.ByteString -> Validation ConnectRequestData
 validateConnect msg = do
   -- decode the request
   command <- liftEither . eitherDecode $ msg
   -- do any validation specific to 'connect'
-  validateConnectRequestData command
+  validate command
   -- if successful, return the command
   pure command
 
