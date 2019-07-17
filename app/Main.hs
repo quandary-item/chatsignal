@@ -183,6 +183,24 @@ performConnectRequestData (Connect providedUsername) conn state = do
   (serveConnection client state) `finally` (disconnect (newUserId) state)
 
 
+connectClient :: Client -> ServerState -> WriterT [Response] Identity ServerState
+connectClient client clients = do
+  -- Send a welcome / motd
+  tell [Response $ ServerMessage "Welcome to One Hour Chat!"]
+  -- Tell the client what their user id is
+  tell [Response $ ConnectionNotify (userId client)]
+
+  -- Add the new client to the state
+  let newClients = addClient client clients
+
+  -- Notify everyone that the party has officially started
+  tell [Broadcast $ ServerMessage $ username client `mappend` " joined"]
+  tell [Broadcast $  ServerStateResponse newClients]
+
+  -- return the updated list of clients
+  pure newClients
+
+
 serveConnection :: Client -> MVar ServerState -> IO ()
 serveConnection client state = do
   -- Connect the client while collecting response messages
@@ -219,24 +237,6 @@ application state pending = do
     case runReaderT (ingestData msg) clients of
       Left errorMsg -> sendSingleResponse conn $ ServerMessage $ T.pack errorMsg
       Right command -> performConnectRequestData command conn state
-
-
-connectClient :: Client -> ServerState -> WriterT [Response] Identity ServerState
-connectClient client clients = do
-  -- Send a welcome / motd
-  tell [Response $ ServerMessage "Welcome to One Hour Chat!"]
-  -- Tell the client what their user id is
-  tell [Response $ ConnectionNotify (userId client)]
-
-  -- Add the new client to the state
-  let newClients = addClient client clients
-
-  -- Notify everyone that the party has officially started
-  tell [Broadcast $ ServerMessage $ username client `mappend` " joined"]
-  tell [Broadcast $  ServerStateResponse newClients]
-
-  -- return the updated list of clients
-  pure newClients
 
 
 main :: IO ()
