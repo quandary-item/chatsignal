@@ -139,6 +139,21 @@ talk client state = do
       broadcast clients m
 
 
+performConnectRequestData :: ConnectRequestData -> WS.Connection -> MVar ServerState -> IO ()
+performConnectRequestData (Connect providedUsername) conn state = do
+  putStrLn "I can't believe you've done this."
+  -- Create a user id
+  newUserId <- makeRandomUserID
+  -- Create the actual client
+  let client = Client { username = providedUsername, userId = newUserId, connection = conn }
+  -- When the connection ends, run `disconnect`
+  flip finally (disconnect newUserId state) $ do
+    -- Connect the client
+    connectClient client state
+    -- Serve subsequent requests for this client
+    forever $ talk client state
+
+
 validateConnectRequestData :: ServerState -> ConnectRequestData -> Either String ()
 validateConnectRequestData clients (Connect providedUsername) = do
   assert (isValidUsername providedUsername) invalidUsernameErrorMessage
@@ -163,21 +178,9 @@ application state pending = do
     clients <- readMVar state
     BL.putStrLn msg
 
-    let requestDecodeResult = validateConnect clients msg
-
-    case requestDecodeResult of
+    case validateConnect clients msg of
       (Left errorMsg) -> sendResponse conn $ ServerMessage $ T.pack errorMsg
-      (Right (Connect providedUsername))  -> do
-        -- Create a user id
-        newUserId <- makeRandomUserID
-        -- Create the actual client
-        let client = Client { username = providedUsername, userId = newUserId, connection = conn }
-        -- When the connection ends, run `disconnect`
-        flip finally (disconnect newUserId state) $ do
-          -- Connect the client
-          connectClient client state
-          -- Serve subsequent requests for this client
-          forever $ talk client state
+      (Right command) -> performConnectRequestData command conn state
 
 
 connectClient :: Client -> MVar ServerState -> IO ()
