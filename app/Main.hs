@@ -1,4 +1,6 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
+
 module Main where
 import Data.Aeson
 import Data.Char (isPunctuation, isSpace)
@@ -7,16 +9,24 @@ import Data.Monoid (mappend)
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Control.Exception (finally)
 import Control.Monad (forM_, forever)
+import Control.Monad.Except (liftEither, MonadError)
 import Control.Concurrent (MVar, newMVar, modifyMVar, readMVar)
 import qualified Data.Text as T
+import Control.Monad.Reader
 
 import qualified Network.WebSockets as WS
 
 import UserID (UserID, makeRandomUserID)
 
-assert :: Bool -> String -> Either String ()
-assert True _  = Right ()
-assert False m = Left m
+type Validation = ReaderT ServerState (Either String)
+
+
+assert :: String -> Bool -> Either String ()
+assert _       True  = Right ()
+assert message False = Left message
+
+assertM :: (MonadError String m) => String -> Bool -> m ()
+assertM message = liftEither . (assert message)
 
 
 data ConnectRequestData = Connect T.Text deriving Show
@@ -164,18 +174,20 @@ performConnectRequestData (Connect providedUsername) conn state = do
     forever $ talk client state
 
 
-validateConnectRequestData :: ServerState -> ConnectRequestData -> Either String ()
-validateConnectRequestData clients (Connect providedUsername) = do
-  assert (isValidUsername providedUsername) invalidUsernameErrorMessage
-  assert (not $ clientExistsWithUsername providedUsername clients) usernameIsTakenErrorMessage
+validateConnectRequestData :: ConnectRequestData -> Validation ()
+validateConnectRequestData (Connect providedUsername) = do
+  clients <- ask
+
+  assertM invalidUsernameErrorMessage $ isValidUsername providedUsername
+  assertM usernameIsTakenErrorMessage $ not $ clientExistsWithUsername providedUsername clients
 
 
-validateConnect :: ServerState -> BL.ByteString -> Either String ConnectRequestData
-validateConnect clients msg = do
+validateConnect :: BL.ByteString -> Validation ConnectRequestData
+validateConnect msg = do
   -- decode the request
-  command <- (eitherDecode msg :: Either String ConnectRequestData)
+  command <- liftEither . eitherDecode $ msg
   -- do any validation specific to 'connect'
-  validateConnectRequestData clients command
+  validateConnectRequestData command
   -- if successful, return the command
   pure command
 
@@ -188,7 +200,7 @@ application state pending = do
     clients <- readMVar state
     BL.putStrLn msg
 
-    case validateConnect clients msg of
+    case runReaderT (validateConnect msg) clients  of
       Left errorMsg -> sendResponse conn $ ServerMessage $ T.pack errorMsg
       Right command -> performConnectRequestData command conn state
 
