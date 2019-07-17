@@ -163,13 +163,12 @@ talk client state = do
 
   clients <- readMVar state
 
-  case runReaderT (ingestData msg) clients of
-    Left errorMsg -> sendResponse (connection client) $ ServerMessage $ T.pack errorMsg
-    Right command -> do
-      -- perform the action and collect responses
-      let responses = execWriter (performRequestData command client clients)
-      -- send the response/broadcasts
-      mapM_ (sendResponse' client clients) responses
+  let responses = case runReaderT (ingestData msg) clients of
+        Left errorMsg -> [Response $ ServerMessage $ T.pack errorMsg]
+        Right command -> execWriter (performRequestData command client clients)
+
+  -- send the response/broadcasts
+  mapM_ (sendResponse' client clients) responses
 
 
 performConnectRequestData :: ConnectRequestData -> WS.Connection -> MVar ServerState -> IO ()
