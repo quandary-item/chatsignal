@@ -152,7 +152,6 @@ talk client state = do
 
 performConnectRequestData :: ConnectRequestData -> WS.Connection -> MVar ServerState -> IO ()
 performConnectRequestData (Connect providedUsername) conn state = do
-  putStrLn "I can't believe you've done this."
   -- Create a user id
   newUserId <- makeRandomUserID
   -- Create the actual client
