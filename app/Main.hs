@@ -10,6 +10,8 @@ import qualified Data.ByteString.Lazy.Char8 as BL
 import Control.Exception (finally)
 import Control.Monad (forM_, forever)
 import Control.Monad.Except (liftEither, MonadError)
+import Control.Monad.Identity (Identity)
+import Control.Monad.Writer.Strict
 import Control.Concurrent (MVar, newMVar, modifyMVar, readMVar)
 import qualified Data.Text as T
 import Control.Monad.Reader
@@ -146,15 +148,13 @@ disconnect userId' state = do
       broadcast s $ ServerMessage $ username client `mappend` " disconnected"
 
 
-performRequestData :: RequestData -> Client -> MVar ServerState -> IO ()
-performRequestData (Ping targetId) client state = do
-  clients <- readMVar state
+performRequestData :: (Monad m) => RequestData -> Client -> ServerState -> WriterT [Response] m ()
+performRequestData (Ping targetId) client clients = do
   case Map.lookup targetId clients of
     Nothing         -> return ()
-    Just targetUser -> broadcast clients $ ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser
-performRequestData (Say message) client state = do
-  clients <- readMVar state
-  broadcast clients $ ServerMessage $ username client `mappend` ": " `mappend` message
+    Just targetUser -> tell [Broadcast $ ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser]
+performRequestData (Say message) client _ = do
+  tell [Broadcast $ ServerMessage $ username client `mappend` ": " `mappend` message]
 
 
 talk :: Client -> MVar ServerState -> IO ()
@@ -165,7 +165,11 @@ talk client state = do
 
   case runReaderT (ingestData msg) clients of
     Left errorMsg -> sendResponse (connection client) $ ServerMessage $ T.pack errorMsg
-    Right command -> performRequestData command client state
+    Right command -> do
+      -- perform the action and collect responses
+      let responses = execWriter (performRequestData command client clients)
+      -- send the response/broadcasts
+      mapM_ (sendResponse' client clients) responses
 
 
 performConnectRequestData :: ConnectRequestData -> WS.Connection -> MVar ServerState -> IO ()
