@@ -34,6 +34,7 @@ class Action r where
 
 
 data ConnectRequestData = Connect T.Text deriving Show
+
 instance Action ConnectRequestData where
   validate (Connect providedUsername) = do
     clients <- ask
@@ -50,6 +51,7 @@ instance FromJSON ConnectRequestData where
 
 
 data RequestData = Ping UserID | Say T.Text deriving Show
+
 instance FromJSON RequestData where
   parseJSON = withObject "ping or say" $ \o -> do
     action <- o .: "action"
@@ -57,6 +59,9 @@ instance FromJSON RequestData where
       "ping"       -> Ping <$> o .: "target"
       "say"        -> Say  <$> o .: "message"
       _            -> fail ("unknown action " ++ action)
+
+instance Action RequestData where
+  validate _ = pure ()
 
 
 data ResponseData = ServerStateResponse ServerState | ServerMessage T.Text | ConnectionNotify UserID
