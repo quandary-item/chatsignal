@@ -177,19 +177,25 @@ performConnectRequestData (Connect providedUsername) conn state = do
   newUserId <- makeRandomUserID
   -- Create the actual client
   let client = Client { username = providedUsername, userId = newUserId, connection = conn }
-  -- When the connection ends, run `disconnect`
-  flip finally (disconnect newUserId state) $ do
-    -- Connect the client while collecting response messages
-    responses <- modifyMVar state $ \clients ->
-      (pure . runWriter) $ connectClient client clients
+  serveConnection client state
 
-    -- Send the responses to the clients/peers
-    newClients <- readMVar state
-    let respond = sendResponse' client newClients
-    mapM_ respond responses
+serveConnection :: Client -> MVar ServerState -> IO ()
+serveConnection client state = finally serveConnect serveDisconnect
+  where
+    serveConnect = do
+      -- Connect the client while collecting response messages
+      responses <- modifyMVar state $ \clients ->
+        (pure . runWriter) $ connectClient client clients
 
-    -- Serve subsequent requests for this client
-    forever $ talk client state
+      -- Send the responses to the clients/peers
+      newClients <- readMVar state
+      let respond = sendResponse' client newClients
+      mapM_ respond responses
+
+      -- Serve subsequent requests for this client
+      forever $ talk client state
+
+    serveDisconnect = disconnect (userId client) state
 
 
 ingestData :: (Action r, FromJSON r) => BL.ByteString -> Validation r
