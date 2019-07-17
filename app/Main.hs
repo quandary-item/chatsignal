@@ -29,7 +29,18 @@ assertM :: (MonadError String m) => String -> Bool -> m ()
 assertM message = liftEither . (assert message)
 
 
+class Action r where
+  validate :: r -> Validation ()
+
+
 data ConnectRequestData = Connect T.Text deriving Show
+instance Action ConnectRequestData where
+  validate (Connect providedUsername) = do
+    clients <- ask
+
+    assertM invalidUsernameErrorMessage $ isValidUsername providedUsername
+    assertM usernameIsTakenErrorMessage $ not $ clientExistsWithUsername providedUsername clients
+
 instance FromJSON ConnectRequestData where
   parseJSON = withObject "connect" $ \o -> do
     action <- o .: "action"
