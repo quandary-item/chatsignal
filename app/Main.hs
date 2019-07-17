@@ -150,23 +150,13 @@ performRequestData (Say message) client state = do
   broadcast clients $ ServerMessage $ username client `mappend` ": " `mappend` message
 
 
-validateTalk :: BL.ByteString -> Validation RequestData
-validateTalk msg = do
-  -- decode the request
-  command <- liftEither . eitherDecode $ msg
-  -- do any validation specific to say/ping/etc
-  validate command
-  -- if successful, return the command
-  pure command
-
-
 talk :: Client -> MVar ServerState -> IO ()
 talk client state = do
   msg <- WS.receiveData (connection client)
 
   clients <- readMVar state
 
-  case runReaderT (validateTalk msg) clients of
+  case runReaderT (ingestData msg) clients of
     Left errorMsg -> sendResponse (connection client) $ ServerMessage $ T.pack errorMsg
     Right command -> performRequestData command client state
 
@@ -185,11 +175,11 @@ performConnectRequestData (Connect providedUsername) conn state = do
     forever $ talk client state
 
 
-validateConnect :: BL.ByteString -> Validation ConnectRequestData
-validateConnect msg = do
+ingestData :: (Action r, FromJSON r) => BL.ByteString -> Validation r
+ingestData msg = do
   -- decode the request
   command <- liftEither . eitherDecode $ msg
-  -- do any validation specific to 'connect'
+  -- validate the request data
   validate command
   -- if successful, return the command
   pure command
@@ -203,7 +193,7 @@ application state pending = do
     clients <- readMVar state
     BL.putStrLn msg
 
-    case runReaderT (validateConnect msg) clients  of
+    case runReaderT (ingestData msg) clients  of
       Left errorMsg -> sendResponse conn $ ServerMessage $ T.pack errorMsg
       Right command -> performConnectRequestData command conn state
 
