@@ -104,7 +104,7 @@ disconnect :: UserID -> MVar ServerState -> IO ()
 disconnect userId' state = do
   currentState <- readMVar state
 
-  case (Map.lookup userId' currentState) of
+  case Map.lookup userId' currentState of
     Nothing -> return ()
     Just client -> do
       s <- modifyMVar state $ \s -> do
@@ -117,8 +117,8 @@ performRequestData :: RequestData -> Client -> MVar ServerState -> IO ()
 performRequestData (Ping targetId) client state = do
   clients <- readMVar state
   case Map.lookup targetId clients of
-    (Nothing)         -> return ()
-    (Just targetUser) -> broadcast clients $ ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser
+    Nothing         -> return ()
+    Just targetUser -> broadcast clients $ ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser
 performRequestData (Say message) client state = do
   clients <- readMVar state
   broadcast clients $ ServerMessage $ username client `mappend` ": " `mappend` message
@@ -145,7 +145,7 @@ talk client state = do
 
   clients <- readMVar state
 
-  case (validateTalk clients msg) of
+  case validateTalk clients msg of
     Left errorMsg -> sendResponse (connection client) $ ServerMessage $ T.pack errorMsg
     Right command -> performRequestData command client state
 
@@ -189,8 +189,8 @@ application state pending = do
     BL.putStrLn msg
 
     case validateConnect clients msg of
-      (Left errorMsg) -> sendResponse conn $ ServerMessage $ T.pack errorMsg
-      (Right command) -> performConnectRequestData command conn state
+      Left errorMsg -> sendResponse conn $ ServerMessage $ T.pack errorMsg
+      Right command -> performConnectRequestData command conn state
 
 
 connectClient :: Client -> MVar ServerState -> IO ()
