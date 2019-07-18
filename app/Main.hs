@@ -11,11 +11,12 @@ import Control.Monad (forM_, forever)
 import Control.Monad.Catch (finally)
 import Control.Monad.Except (liftEither, MonadError)
 import Control.Monad.Identity (Identity)
-import Control.Monad.Writer.Strict
+import Control.Monad.Writer.Lazy
 import Control.Concurrent (MVar, newMVar, modifyMVar, readMVar)
 import qualified Data.Text as T
 import Control.Monad.Reader
 import qualified Network.WebSockets as WS
+import Data.ByteString.UTF8 (toString)
 
 import UserID (UserID, makeRandomUserID)
 
@@ -67,19 +68,23 @@ instance Action RequestData where
 
 data Response = Response ResponseData WS.Connection | Broadcast ResponseData ServerState
 
+instance Show Response where
+  show (Response responseData _) = "Response: " ++ show responseData
+  show (Broadcast responseData _) = "Broadcast: " ++ show responseData
+
 sendResponse :: Response -> IO ()
 sendResponse (Response  r conn   ) = sendSingleResponse conn r
 sendResponse (Broadcast r clients) = sendBroadcastResponse clients r
 
 sendSingleResponse :: WS.Connection -> ResponseData -> IO ()
 sendSingleResponse conn responseData = do
-  BL.putStrLn message
+  putStrLn $ "response: " ++ (toString $ BL.toStrict message)
   WS.sendTextData conn message
   where message = encode responseData
 
 sendBroadcastResponse :: ServerState -> ResponseData -> IO ()
 sendBroadcastResponse clients responseData = do
-  BL.putStrLn message
+  putStrLn $ "broadcast: " ++ (toString $ BL.toStrict message)
   forM_ clients $ \client -> WS.sendTextData (connection client) message
   where message = encode responseData
 
@@ -101,6 +106,9 @@ instance ToJSON ResponseData where
                                                 ]
 
 data Client = Client { username :: T.Text, userId :: UserID, connection :: WS.Connection }
+
+instance Show Client where
+  show (Client { username = username', userId = userId' }) = "Client: " ++ show (username', userId')
 
 instance ToJSON Client where
   toJSON client = object [ "username" .= username client
@@ -138,7 +146,10 @@ usernameIsTakenErrorMessage = "Username is already taken by an existing user"
 
 disconnect :: UserID -> MVar ServerState -> WriterT [Response] IO ()
 disconnect userId' state = do
+  liftIO $ putStrLn "disconnect"
   currentState <- liftIO $ readMVar state
+  liftIO $ putStrLn $ show currentState
+  
 
   case Map.lookup userId' currentState of
     Nothing -> return ()
@@ -206,6 +217,7 @@ serveConnection client state = do
     let (newClients, responses) = runWriter $ connectClient client clients
     pure (newClients, responses)
 
+  liftIO $ putStrLn $ show responses
   -- Push the responses out onto this monad
   tell responses
 
@@ -235,7 +247,7 @@ application state pending = do
     responses <- case runReaderT (ingestData msg) clients of
           Left errorMsg -> pure [Response (ServerMessage $ T.pack errorMsg) conn]
           Right command -> execWriterT (performConnectRequestData command conn state)
-
+    putStrLn "end of responses..."
     -- send the response/broadcasts
     mapM_ sendResponse responses
 
