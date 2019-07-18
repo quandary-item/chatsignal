@@ -66,11 +66,11 @@ instance Action RequestData where
   validate _ = pure ()
 
 
-data Response = Response ResponseData | Broadcast ResponseData
+data Response = Response ResponseData WS.Connection | Broadcast ResponseData ServerState
 
-sendResponse :: Client -> ServerState -> Response -> IO ()
-sendResponse client _       (Response r ) = sendSingleResponse (connection client) r
-sendResponse _      clients (Broadcast r) = sendBroadcastResponse clients r
+sendResponse :: Response -> IO ()
+sendResponse (Response  r conn   ) = sendSingleResponse conn r
+sendResponse (Broadcast r clients) = sendBroadcastResponse clients r
 
 sendSingleResponse :: WS.Connection -> ResponseData -> IO ()
 sendSingleResponse conn responseData = do
@@ -154,9 +154,9 @@ performRequestData :: (Monad m) => RequestData -> Client -> ServerState -> Write
 performRequestData (Ping targetId) client clients = do
   case Map.lookup targetId clients of
     Nothing         -> return ()
-    Just targetUser -> tell [Broadcast $ ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser]
-performRequestData (Say message) client _ = do
-  tell [Broadcast $ ServerMessage $ username client `mappend` ": " `mappend` message]
+    Just targetUser -> tell [Broadcast (ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser) clients]
+performRequestData (Say message) client clients = do
+  tell [Broadcast (ServerMessage $ username client `mappend` ": " `mappend` message) clients]
 
 
 talk :: Client -> MVar ServerState -> IO ()
@@ -166,11 +166,11 @@ talk client state = do
   clients <- readMVar state
 
   let responses = case runReaderT (ingestData msg) clients of
-        Left errorMsg -> [Response $ ServerMessage $ T.pack errorMsg]
+        Left errorMsg -> [Response (ServerMessage $ T.pack errorMsg) (connection client)]
         Right command -> execWriter (performRequestData command client clients)
 
   -- send the response/broadcasts
-  mapM_ (sendResponse client clients) responses
+  mapM_ sendResponse responses
 
 
 performConnectRequestData :: ConnectRequestData -> WS.Connection -> MVar ServerState -> IO ()
@@ -186,16 +186,16 @@ performConnectRequestData (Connect providedUsername) conn state = do
 connectClient :: Client -> ServerState -> WriterT [Response] Identity ServerState
 connectClient client clients = do
   -- Send a welcome / motd
-  tell [Response $ ServerMessage "Welcome to One Hour Chat!"]
+  tell [Response (ServerMessage "Welcome to One Hour Chat!") (connection client)]
   -- Tell the client what their user id is
-  tell [Response $ ConnectionNotify (userId client)]
+  tell [Response (ConnectionNotify (userId client)) (connection client)]
 
   -- Add the new client to the state
   let newClients = addClient client clients
 
   -- Notify everyone that the party has officially started
-  tell [Broadcast $ ServerMessage $ username client `mappend` " joined"]
-  tell [Broadcast $  ServerStateResponse newClients]
+  tell [Broadcast (ServerMessage $ username client `mappend` " joined") clients]
+  tell [Broadcast (ServerStateResponse newClients) newClients]
 
   -- return the updated list of clients
   pure newClients
@@ -209,8 +209,7 @@ serveConnection client state = do
     pure (newClients, (responses, newClients))
 
   -- Send the responses to the clients/peers
-  let respond = sendResponse client newClients
-  mapM_ respond responses
+  mapM_ sendResponse responses
 
   -- Serve subsequent requests for this client
   forever $ talk client state
@@ -230,13 +229,17 @@ application :: MVar ServerState -> WS.ServerApp
 application state pending = do
     conn <- WS.acceptRequest pending
     WS.forkPingThread conn 30
-    msg <- WS.receiveData conn
-    clients <- readMVar state
-    BL.putStrLn msg
 
-    case runReaderT (ingestData msg) clients of
-      Left errorMsg -> sendSingleResponse conn $ ServerMessage $ T.pack errorMsg
-      Right command -> performConnectRequestData command conn state
+    msg <- WS.receiveData conn
+
+    clients <- readMVar state
+
+    let responses = case runReaderT (ingestData msg) clients of
+          Left errorMsg -> [Response $ ServerMessage $ T.pack errorMsg]
+          Right command -> execWriter (performConnectRequestData command conn state)
+
+    -- send the response/broadcasts
+    mapM_ sendResponse responses
 
 
 main :: IO ()
