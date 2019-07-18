@@ -30,6 +30,31 @@ class Validatable r where
 class Performable r a | r -> a where
   perform :: r -> MVar ServerState -> ReaderT a IO ()
 
+class Response r where
+  send :: r -> IO ()
+
+data SingleResponse = SingleResponse ResponseData WS.Connection
+
+instance Response SingleResponse where
+  send (SingleResponse responseData conn) = do
+    putStrLn $ "response: " ++ (toString $ BL.toStrict message)
+    WS.sendTextData conn message
+      where message = encode responseData
+
+instance Show SingleResponse where
+  show (SingleResponse responseData _) = "Response: " ++ show responseData
+
+
+data BroadcastResponse = BroadcastResponse ResponseData ServerState
+instance Response BroadcastResponse where
+  send (BroadcastResponse responseData clients) = do
+    putStrLn $ "broadcast: " ++ (toString $ BL.toStrict message)
+    forM_ clients $ \client -> WS.sendTextData (connection client) message
+      where message = encode responseData
+
+instance Show BroadcastResponse where
+  show (BroadcastResponse responseData _) = "Broadcast: " ++ show responseData
+
 
 data ConnectRequestData = Connect T.Text deriving Show
 
@@ -71,40 +96,17 @@ instance FromJSON RequestData where
 instance Validatable RequestData where
   validate _ = pure ()
 
-instance Performable RequestData Client where  
+instance Performable RequestData Client where
   perform (Ping targetId) state = do
     client <- ask
     clients <- liftIO $ readMVar state
     case Map.lookup targetId clients of
       Nothing         -> return ()
-      Just targetUser -> liftIO $ sendResponse $ Broadcast (ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser) clients
+      Just targetUser -> liftIO $ send $ BroadcastResponse (ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser) clients
   perform (Say message) state = do
     client <- ask
     clients <- liftIO $ readMVar state
-    liftIO $ sendResponse $ Broadcast (ServerMessage $ username client `mappend` ": " `mappend` message) clients
-
-
-data Response = Response ResponseData WS.Connection | Broadcast ResponseData ServerState
-
-instance Show Response where
-  show (Response responseData _) = "Response: " ++ show responseData
-  show (Broadcast responseData _) = "Broadcast: " ++ show responseData
-
-sendResponse :: Response -> IO ()
-sendResponse (Response  r conn   ) = sendSingleResponse conn r
-sendResponse (Broadcast r clients) = sendBroadcastResponse clients r
-
-sendSingleResponse :: WS.Connection -> ResponseData -> IO ()
-sendSingleResponse conn responseData = do
-  putStrLn $ "response: " ++ (toString $ BL.toStrict message)
-  WS.sendTextData conn message
-  where message = encode responseData
-
-sendBroadcastResponse :: ServerState -> ResponseData -> IO ()
-sendBroadcastResponse clients responseData = do
-  putStrLn $ "broadcast: " ++ (toString $ BL.toStrict message)
-  forM_ clients $ \client -> WS.sendTextData (connection client) message
-  where message = encode responseData
+    liftIO $ send $ BroadcastResponse (ServerMessage $ username client `mappend` ": " `mappend` message) clients
 
 
 data ResponseData = ServerStateResponse ServerState | ServerMessage T.Text | ConnectionNotify UserID
@@ -172,22 +174,22 @@ disconnect userId' state = do
     Nothing -> return ()
     Just client -> do
       s <- modifyMVar state $ pure . dupe . (removeClient userId')
-      sendResponse $ Broadcast (ServerMessage $ username client `mappend` " disconnected") s
+      send $ BroadcastResponse (ServerMessage $ username client `mappend` " disconnected") s
 
 
 connectClient :: Client -> ServerState -> IO ServerState
 connectClient client clients = do
   -- Send a welcome / motd
-  sendResponse $ Response (ServerMessage "Welcome to One Hour Chat!") (connection client)
+  send $ SingleResponse (ServerMessage "Welcome to One Hour Chat!") (connection client)
   -- Tell the client what their user id is
-  sendResponse $ Response (ConnectionNotify (userId client)) (connection client)
+  send $ SingleResponse (ConnectionNotify (userId client)) (connection client)
 
   -- Add the new client to the state
   let newClients = addClient client clients
 
   -- Notify everyone that the party has officially started
-  sendResponse $ Broadcast (ServerMessage $ username client `mappend` " joined") clients
-  sendResponse $ Broadcast (ServerStateResponse newClients) newClients
+  send $ BroadcastResponse (ServerMessage $ username client `mappend` " joined") clients
+  send $ BroadcastResponse (ServerStateResponse newClients) newClients
 
   -- return the updated list of clients
   pure newClients
@@ -196,7 +198,7 @@ connectClient client clients = do
 serveConnection :: Client -> MVar ServerState -> IO ()
 serveConnection client state = do
   -- Connect the client by updating the state
-  modifyMVar_ state $ connectClient client 
+  modifyMVar_ state $ connectClient client
 
   -- Serve subsequent requests for this client
   forever $ do
@@ -205,7 +207,7 @@ serveConnection client state = do
     clients <- readMVar $ state
 
     case runReaderT (ingestData msg) clients of
-      Left errorMsg -> sendResponse $ Response (ServerMessage $ T.pack errorMsg) (connection client)
+      Left errorMsg -> send $ SingleResponse (ServerMessage $ T.pack errorMsg) (connection client)
       Right command -> runReaderT (perform (command :: RequestData) state) client
 
 
@@ -229,7 +231,7 @@ application state pending = do
     clients <- readMVar state
 
     case runReaderT (ingestData msg) clients of
-      Left errorMsg -> sendResponse $ Response (ServerMessage $ T.pack errorMsg) conn
+      Left errorMsg -> send $ SingleResponse (ServerMessage $ T.pack errorMsg) conn
       Right command -> runReaderT (perform (command :: ConnectRequestData) state) conn
 
 
