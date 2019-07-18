@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -26,7 +27,7 @@ type Validation = ReaderT ServerState (Either String)
 class Validatable r where
   validate :: r -> Validation ()
 
-class Performable r a where
+class Performable r a | r -> a where
   perform :: r -> MVar ServerState -> ReaderT a IO ()
 
 
