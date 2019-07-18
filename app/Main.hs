@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Main where
@@ -22,18 +23,31 @@ import Util (assertM, dupe)
 type Validation = ReaderT ServerState (Either String)
 
 
-class Action r where
+class Validatable r where
   validate :: r -> Validation ()
+
+class Performable r a where
+  perform :: r -> MVar ServerState -> ReaderT a IO ()
 
 
 data ConnectRequestData = Connect T.Text deriving Show
 
-instance Action ConnectRequestData where
+instance Validatable ConnectRequestData where
   validate (Connect providedUsername) = do
     clients <- ask
 
     assertM invalidUsernameErrorMessage $ isValidUsername providedUsername
     assertM usernameIsTakenErrorMessage $ not $ clientExistsWithUsername providedUsername clients
+
+instance Performable ConnectRequestData WS.Connection where
+  perform (Connect providedUsername) state = do
+    conn <- ask
+    -- Create a user id
+    newUserId <- liftIO $ makeRandomUserID
+    -- Create the actual client
+    let client = Client { username = providedUsername, userId = newUserId, connection = conn }
+
+    (liftIO $ serveConnection client state) `finally` (liftIO $ disconnect (newUserId) state)
 
 instance FromJSON ConnectRequestData where
   parseJSON = withObject "connect" $ \o -> do
@@ -53,8 +67,20 @@ instance FromJSON RequestData where
       "say"        -> Say  <$> o .: "message"
       _            -> fail ("unknown action " ++ action)
 
-instance Action RequestData where
+instance Validatable RequestData where
   validate _ = pure ()
+
+instance Performable RequestData Client where  
+  perform (Ping targetId) state = do
+    client <- ask
+    clients <- liftIO $ readMVar state
+    case Map.lookup targetId clients of
+      Nothing         -> return ()
+      Just targetUser -> liftIO $ sendResponse $ Broadcast (ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser) clients
+  perform (Say message) state = do
+    client <- ask
+    clients <- liftIO $ readMVar state
+    liftIO $ sendResponse $ Broadcast (ServerMessage $ username client `mappend` ": " `mappend` message) clients
 
 
 data Response = Response ResponseData WS.Connection | Broadcast ResponseData ServerState
@@ -148,25 +174,6 @@ disconnect userId' state = do
       sendResponse $ Broadcast (ServerMessage $ username client `mappend` " disconnected") s
 
 
-performRequestData :: RequestData -> Client -> ServerState -> IO ()
-performRequestData (Ping targetId) client clients = do
-  case Map.lookup targetId clients of
-    Nothing         -> return ()
-    Just targetUser -> sendResponse $ Broadcast (ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser) clients
-performRequestData (Say message) client clients = do
-  sendResponse $ Broadcast (ServerMessage $ username client `mappend` ": " `mappend` message) clients
-
-
-performConnectRequestData :: ConnectRequestData -> WS.Connection -> MVar ServerState -> IO ()
-performConnectRequestData (Connect providedUsername) conn state = do
-  -- Create a user id
-  newUserId <- makeRandomUserID
-  -- Create the actual client
-  let client = Client { username = providedUsername, userId = newUserId, connection = conn }
-
-  (serveConnection client state) `finally` (disconnect (newUserId) state)
-
-
 connectClient :: Client -> ServerState -> IO ServerState
 connectClient client clients = do
   -- Send a welcome / motd
@@ -191,17 +198,17 @@ serveConnection client state = do
   modifyMVar_ state $ connectClient client 
 
   -- Serve subsequent requests for this client
-  forever do
+  forever $ do
     msg <- WS.receiveData $ (connection client)
 
     clients <- readMVar $ state
 
     case runReaderT (ingestData msg) clients of
       Left errorMsg -> sendResponse $ Response (ServerMessage $ T.pack errorMsg) (connection client)
-      Right command -> performRequestData command client clients
+      Right command -> runReaderT (perform (command :: RequestData) state) client
 
 
-ingestData :: (Action r, FromJSON r) => BL.ByteString -> Validation r
+ingestData :: (Validatable r, FromJSON r) => BL.ByteString -> Validation r
 ingestData msg = do
   -- decode the request
   command <- liftEither . eitherDecode $ msg
@@ -222,7 +229,7 @@ application state pending = do
 
     case runReaderT (ingestData msg) clients of
       Left errorMsg -> sendResponse $ Response (ServerMessage $ T.pack errorMsg) conn
-      Right command -> performConnectRequestData command conn state
+      Right command -> runReaderT (perform (command :: ConnectRequestData) state) conn
 
 
 main :: IO ()
