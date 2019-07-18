@@ -16,7 +16,6 @@ import Control.Concurrent (MVar, newMVar, modifyMVar, modifyMVar_, readMVar)
 import qualified Data.Text as T
 import Control.Monad.Reader
 import qualified Network.WebSockets as WS
-import Data.ByteString.UTF8 (toString)
 
 import UserID (UserID, makeRandomUserID)
 import Util (assertM, dupe)
@@ -34,10 +33,9 @@ class Response r where
   send :: r -> IO ()
 
 data SingleResponse = SingleResponse ResponseData WS.Connection
-
 instance Response SingleResponse where
-  send (SingleResponse responseData conn) = do
-    putStrLn $ "response: " ++ (toString $ BL.toStrict message)
+  send response@(SingleResponse responseData conn) = do
+    putStrLn $ show response
     WS.sendTextData conn message
       where message = encode responseData
 
@@ -47,8 +45,8 @@ instance Show SingleResponse where
 
 data BroadcastResponse = BroadcastResponse ResponseData ServerState
 instance Response BroadcastResponse where
-  send (BroadcastResponse responseData clients) = do
-    putStrLn $ "broadcast: " ++ (toString $ BL.toStrict message)
+  send response@(BroadcastResponse responseData clients) = do
+    putStrLn $ show response
     forM_ clients $ \client -> WS.sendTextData (connection client) message
       where message = encode responseData
 
