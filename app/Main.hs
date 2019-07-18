@@ -80,16 +80,17 @@ instance FromJSON ConnectRequestData where
       "connect"    -> Connect <$> o .: "username"
       _            -> fail ("unknown action " ++ action)
 
-
-data RequestData = Ping UserID | Say T.Text deriving Show
+type SDPData = T.Text
+data RequestData = Ping UserID | Say T.Text | OfferSDPRequest UserID SDPData deriving Show
 
 instance FromJSON RequestData where
-  parseJSON = withObject "ping or say" $ \o -> do
+  parseJSON = withObject "ping or say or offersdprequest" $ \o -> do
     action <- o .: "action"
     case action of
-      "ping"       -> Ping <$> o .: "target"
-      "say"        -> Say  <$> o .: "message"
-      _            -> fail ("unknown action " ++ action)
+      "ping"  -> Ping            <$> o .: "target"
+      "say"   -> Say             <$> o .: "message"
+      "offer" -> OfferSDPRequest <$> o .: "to" <*> o .: "sdp"
+      _       -> fail ("unknown action " ++ action)
 
 instance Validatable RequestData where
   validate _ = pure ()
@@ -105,13 +106,21 @@ instance Performable RequestData Client where
     client <- ask
     clients <- liftIO $ readMVar state
     liftIO $ send $ BroadcastResponse (ServerMessage $ username client `mappend` ": " `mappend` message) clients
+  perform (OfferSDPRequest targetId sdp) state = do
+    client <- ask
+    clients <- liftIO $ readMVar state
+
+    case Map.lookup targetId clients of
+      Nothing         -> return ()
+      Just targetUser -> liftIO $ send $ SingleResponse (OfferSDPResponse (userId client) sdp) (connection targetUser)
 
 
-data ResponseData = ServerStateResponse ServerState | ServerMessage T.Text | ConnectionNotify UserID
+data ResponseData = ServerStateResponse ServerState | ServerMessage T.Text | ConnectionNotify UserID | OfferSDPResponse UserID SDPData
 instance Show ResponseData where
   show (ServerStateResponse clients) = "Clients: " ++ (T.unpack $ T.intercalate ", " $ map (T.pack . show . fst) $ Map.toList clients)
   show (ServerMessage text)          = "Message: " ++ T.unpack text
   show (ConnectionNotify userId')    = "Notify: "  ++ show userId'
+  show (OfferSDPResponse fromId _)   = "Offer SDP Response from " ++ show fromId
 instance ToJSON ResponseData where
   toJSON (ServerStateResponse clients) = object [ "kind"    .= ("clients" :: T.Text)
                                                 , "clients" .= map snd (Map.toList clients)
@@ -122,6 +131,10 @@ instance ToJSON ResponseData where
   toJSON (ConnectionNotify userId')    = object [ "kind"    .= ("notify" :: T.Text)
                                                 , "user_id" .= show userId'
                                                 ]
+  toJSON (OfferSDPResponse fromId sdpData) = object [ "kind" .= ("offer" :: T.Text)
+                                                    , "from" .= show fromId
+                                                    , "sdp"  .= sdpData
+                                                    ]
 
 data Client = Client { username :: T.Text, userId :: UserID, connection :: WS.Connection }
 
