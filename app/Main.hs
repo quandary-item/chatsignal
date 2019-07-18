@@ -157,18 +157,6 @@ performRequestData (Say message) client clients = do
   sendResponse $ Broadcast (ServerMessage $ username client `mappend` ": " `mappend` message) clients
 
 
-talk :: Client -> MVar ServerState -> IO ()
-talk client state = do
-  msg <- WS.receiveData $ (connection client)
-
-  clients <- readMVar $ state
-
-  case runReaderT (ingestData msg) clients of
-    Left errorMsg -> sendResponse $ Response (ServerMessage $ T.pack errorMsg) (connection client)
-    Right command -> performRequestData command client clients
-
-
-
 performConnectRequestData :: ConnectRequestData -> WS.Connection -> MVar ServerState -> IO ()
 performConnectRequestData (Connect providedUsername) conn state = do
   -- Create a user id
@@ -203,7 +191,14 @@ serveConnection client state = do
   modifyMVar_ state $ connectClient client 
 
   -- Serve subsequent requests for this client
-  forever $ talk client state
+  forever do
+    msg <- WS.receiveData $ (connection client)
+
+    clients <- readMVar $ state
+
+    case runReaderT (ingestData msg) clients of
+      Left errorMsg -> sendResponse $ Response (ServerMessage $ T.pack errorMsg) (connection client)
+      Right command -> performRequestData command client clients
 
 
 ingestData :: (Action r, FromJSON r) => BL.ByteString -> Validation r
