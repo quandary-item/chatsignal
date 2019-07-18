@@ -15,7 +15,6 @@ import Control.Monad.Writer.Strict
 import Control.Concurrent (MVar, newMVar, modifyMVar, readMVar)
 import qualified Data.Text as T
 import Control.Monad.Reader
-
 import qualified Network.WebSockets as WS
 
 import UserID (UserID, makeRandomUserID)
@@ -137,17 +136,17 @@ usernameIsTakenErrorMessage :: String
 usernameIsTakenErrorMessage = "Username is already taken by an existing user"
 
 
-disconnect :: UserID -> MVar ServerState -> IO ()
+disconnect :: UserID -> MVar ServerState -> WriterT [Response] IO ()
 disconnect userId' state = do
-  currentState <- readMVar state
+  currentState <- liftIO $ readMVar state
 
   case Map.lookup userId' currentState of
     Nothing -> return ()
     Just client -> do
-      s <- modifyMVar state $ \s -> do
+      s <- liftIO $ modifyMVar state $ \s -> do
         let s' = removeClient userId' s
         return (s', s')
-      sendBroadcastResponse s $ ServerMessage $ username client `mappend` " disconnected"
+      tell [Broadcast (ServerMessage $ username client `mappend` " disconnected") s]
 
 
 performRequestData :: (Monad m) => RequestData -> Client -> ServerState -> WriterT [Response] m ()
@@ -159,24 +158,23 @@ performRequestData (Say message) client clients = do
   tell [Broadcast (ServerMessage $ username client `mappend` ": " `mappend` message) clients]
 
 
-talk :: Client -> MVar ServerState -> IO ()
+talk :: Client -> MVar ServerState -> WriterT [Response] IO ()
 talk client state = do
-  msg <- WS.receiveData (connection client)
+  msg <- liftIO . WS.receiveData $ (connection client)
 
-  clients <- readMVar state
+  clients <- liftIO . readMVar $ state
 
   let responses = case runReaderT (ingestData msg) clients of
         Left errorMsg -> [Response (ServerMessage $ T.pack errorMsg) (connection client)]
         Right command -> execWriter (performRequestData command client clients)
 
-  -- send the response/broadcasts
-  mapM_ sendResponse responses
+  tell responses
 
 
-performConnectRequestData :: ConnectRequestData -> WS.Connection -> MVar ServerState -> IO ()
+performConnectRequestData :: ConnectRequestData -> WS.Connection -> MVar ServerState -> WriterT [Response] IO ()
 performConnectRequestData (Connect providedUsername) conn state = do
   -- Create a user id
-  newUserId <- makeRandomUserID
+  newUserId <- liftIO $ makeRandomUserID
   -- Create the actual client
   let client = Client { username = providedUsername, userId = newUserId, connection = conn }
 
@@ -201,15 +199,15 @@ connectClient client clients = do
   pure newClients
 
 
-serveConnection :: Client -> MVar ServerState -> IO ()
+serveConnection :: Client -> MVar ServerState -> WriterT [Response] IO ()
 serveConnection client state = do
   -- Connect the client while collecting response messages
-  (responses, newClients) <- modifyMVar state $ \clients -> do
+  responses <- liftIO . modifyMVar state $ \clients -> do
     let (newClients, responses) = runWriter $ connectClient client clients
-    pure (newClients, (responses, newClients))
+    pure (newClients, responses)
 
-  -- Send the responses to the clients/peers
-  mapM_ sendResponse responses
+  -- Push the responses out onto this monad
+  tell responses
 
   -- Serve subsequent requests for this client
   forever $ talk client state
@@ -234,9 +232,9 @@ application state pending = do
 
     clients <- readMVar state
 
-    let responses = case runReaderT (ingestData msg) clients of
-          Left errorMsg -> [Response $ ServerMessage $ T.pack errorMsg]
-          Right command -> execWriter (performConnectRequestData command conn state)
+    responses <- case runReaderT (ingestData msg) clients of
+          Left errorMsg -> pure [Response (ServerMessage $ T.pack errorMsg) conn]
+          Right command -> execWriterT (performConnectRequestData command conn state)
 
     -- send the response/broadcasts
     mapM_ sendResponse responses
