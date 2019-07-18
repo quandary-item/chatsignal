@@ -9,7 +9,7 @@ import Data.Monoid (mappend)
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Control.Monad (forM_, forever)
 import Control.Monad.Catch (finally)
-import Control.Monad.Except (liftEither, MonadError)
+import Control.Monad.Except (liftEither)
 import Control.Concurrent (MVar, newMVar, modifyMVar, modifyMVar_, readMVar)
 import qualified Data.Text as T
 import Control.Monad.Reader
@@ -17,17 +17,9 @@ import qualified Network.WebSockets as WS
 import Data.ByteString.UTF8 (toString)
 
 import UserID (UserID, makeRandomUserID)
-
+import Util (assertM)
 
 type Validation = ReaderT ServerState (Either String)
-
-
-assert :: String -> Bool -> Either String ()
-assert _       True  = Right ()
-assert message False = Left message
-
-assertM :: (MonadError String m) => String -> Bool -> m ()
-assertM message = liftEither . (assert message)
 
 
 class Action r where
