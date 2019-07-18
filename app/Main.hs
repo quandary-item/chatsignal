@@ -17,7 +17,7 @@ import qualified Network.WebSockets as WS
 import Data.ByteString.UTF8 (toString)
 
 import UserID (UserID, makeRandomUserID)
-import Util (assertM)
+import Util (assertM, dupe)
 
 type Validation = ReaderT ServerState (Either String)
 
@@ -144,9 +144,7 @@ disconnect userId' state = do
   case Map.lookup userId' currentState of
     Nothing -> return ()
     Just client -> do
-      s <- modifyMVar state $ \s -> do
-        let s' = removeClient userId' s
-        return (s', s')
+      s <- modifyMVar state $ pure . dupe . (removeClient userId')
       sendResponse $ Broadcast (ServerMessage $ username client `mappend` " disconnected") s
 
 
