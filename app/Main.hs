@@ -152,27 +152,26 @@ instance Show ResponseData where
   show (OfferSDPResponse fromId _)   = "Offer SDP Response from " ++ show fromId
   show (SendICEResponse  fromId _)   = "Send ICE Candidate from " ++ show fromId
   show (StartCallResponse fromId)    = "Start Call from " ++ show fromId
+
+kind :: ResponseData -> T.Text
+kind (ServerStateResponse _) = "clients"
+kind (ServerMessage _) = "message"
+kind (ConnectionNotify _) = "notify"
+kind (OfferSDPResponse _ _) = "offer"
+kind (SendICEResponse _ _) = "ice"
+kind (StartCallResponse _) = "startcall"
+
+toJSON' :: KeyValue a => ResponseData -> [a]
+toJSON' (ServerStateResponse clients)     = [ "clients" .= map snd (Map.toList clients) ]
+toJSON' (ServerMessage text)              = [ "data" .= text ]
+toJSON' (ConnectionNotify userId')        = [ "user_id" .= show userId' ]
+toJSON' (OfferSDPResponse fromId sdpData) = [ "from" .= show fromId, "sdp"  .= sdpData ]
+toJSON' (SendICEResponse fromId iceData)  = [ "from" .= show fromId, "ice"  .= iceData ]
+toJSON' (StartCallResponse fromId)        = [ "from" .= show fromId ]
+
 instance ToJSON ResponseData where
-  toJSON (ServerStateResponse clients) = object [ "kind"    .= ("clients" :: T.Text)
-                                                , "clients" .= map snd (Map.toList clients)
-                                                ]
-  toJSON (ServerMessage text)          = object [ "kind" .= ("message" :: T.Text)
-                                                , "data" .= text
-                                                ]
-  toJSON (ConnectionNotify userId')    = object [ "kind"    .= ("notify" :: T.Text)
-                                                , "user_id" .= show userId'
-                                                ]
-  toJSON (OfferSDPResponse fromId sdpData) = object [ "kind" .= ("offer" :: T.Text)
-                                                    , "from" .= show fromId
-                                                    , "sdp"  .= sdpData
-                                                    ]
-  toJSON (SendICEResponse fromId iceData) = object [ "kind" .= ("ice" :: T.Text)
-                                                    , "from" .= show fromId
-                                                    , "ice"  .= iceData
-                                                    ]
-  toJSON (StartCallResponse fromId)       = object [ "kind" .= ("startcall" :: T.Text)
-                                                   , "from" .= show fromId
-                                                   ]
+  toJSON responseData = object $ [ "kind" .= kind responseData ] ++ toJSON' responseData
+
 
 data Client = Client { username :: T.Text, userId :: UserID, connection :: WS.Connection }
 
