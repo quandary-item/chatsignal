@@ -33,6 +33,11 @@ class Performable r a | r -> a where
 class Response r where
   send :: r -> IO ()
 
+-- mtl-friendly send method
+sendIO :: (MonadIO m, Response r) => r -> m ()
+sendIO = liftIO . send
+
+
 data SingleResponse = SingleResponse ResponseData WS.Connection
 instance Response SingleResponse where
   send response@(SingleResponse responseData conn) = do
@@ -109,29 +114,29 @@ instance Performable RequestData (Client, ServerState) where
     (client, clients) <- ask
     case Map.lookup targetId clients of
       Nothing         -> return ()
-      Just targetUser -> liftIO $ send $ BroadcastResponse (ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser) clients
+      Just targetUser -> sendIO $ BroadcastResponse (ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser) clients
 
   perform (Say message) _ = do
     (client, clients) <- ask
-    liftIO $ send $ BroadcastResponse (ServerMessage $ username client `mappend` ": " `mappend` message) clients
+    sendIO $ BroadcastResponse (ServerMessage $ username client `mappend` ": " `mappend` message) clients
 
   perform (OfferSDPRequest targetId sdp) _ = do
     (client, clients) <- ask
     case Map.lookup targetId clients of
       Nothing         -> return ()
-      Just targetUser -> liftIO $ send $ SingleResponse (OfferSDPResponse (userId client) sdp) (connection targetUser)
+      Just targetUser -> sendIO $ SingleResponse (OfferSDPResponse (userId client) sdp) (connection targetUser)
 
   perform (SendICECandidate targetId ice) _ = do
     (client, clients) <- ask
     case Map.lookup targetId clients of
       Nothing         -> return ()
-      Just targetUser -> liftIO $ send $ SingleResponse (SendICEResponse (userId client) ice) (connection targetUser)
+      Just targetUser -> sendIO $ SingleResponse (SendICEResponse (userId client) ice) (connection targetUser)
 
   perform (StartCall targetId) _ = do
     (client, clients) <- ask
     case Map.lookup targetId clients of
       Nothing         -> return ()
-      Just targetUser -> liftIO $ send $ SingleResponse (StartCallResponse (userId client)) (connection targetUser)
+      Just targetUser -> sendIO $ SingleResponse (StartCallResponse (userId client)) (connection targetUser)
 
 
 data ResponseData = ServerStateResponse ServerState
