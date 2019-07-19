@@ -92,10 +92,11 @@ data RequestData = Ping UserID
                  | Say T.Text
                  | OfferSDPRequest UserID SDPData
                  | SendICECandidate UserID ICECandidate
-                 | StartCall UserID deriving Show
+                 | StartCall UserID
+                 | AcceptCall UserID deriving Show
 
 instance FromJSON RequestData where
-  parseJSON = withObject "ping or say or offersdprequest or sendicecandidate or startcall" $ \o -> do
+  parseJSON = withObject "ping or say or offersdprequest or sendicecandidate or startcall or acceptcall" $ \o -> do
     action <- o .: "action"
     case action of
       "ping"  -> Ping            <$> o .: "target"
@@ -103,6 +104,7 @@ instance FromJSON RequestData where
       "offer" -> OfferSDPRequest <$> o .: "to" <*> o .: "sdp"
       "ice"   -> SendICECandidate <$> o .: "to" <*> o .: "ice"
       "startcall" -> StartCall <$> o .: "to"
+      "acceptcall" -> AcceptCall <$> o .: "to"
       _       -> fail ("unknown action " ++ action)
 
 instance Validatable RequestData where
@@ -138,6 +140,12 @@ instance Performable RequestData (Client, ServerState) where
       Nothing         -> return ()
       Just targetUser -> sendIO $ SingleResponse (StartCallResponse (userId client)) (connection targetUser)
 
+  perform (AcceptCall targetId) _ = do
+    (client, clients) <- ask
+    case Map.lookup targetId clients of
+      Nothing         -> return ()
+      Just targetUser -> sendIO $ SingleResponse (AcceptCallResponse (userId client)) (connection targetUser)
+
 
 data ResponseData = ServerStateResponse ServerState
                   | ServerMessage T.Text
@@ -145,6 +153,7 @@ data ResponseData = ServerStateResponse ServerState
                   | OfferSDPResponse UserID SDPData
                   | SendICEResponse UserID ICECandidate
                   | StartCallResponse UserID
+                  | AcceptCallResponse UserID
 instance Show ResponseData where
   show (ServerStateResponse clients) = "Clients: " ++ (T.unpack $ T.intercalate ", " $ map (T.pack . show . fst) $ Map.toList clients)
   show (ServerMessage text)          = "Message: " ++ T.unpack text
@@ -152,6 +161,7 @@ instance Show ResponseData where
   show (OfferSDPResponse fromId _)   = "Offer SDP Response from " ++ show fromId
   show (SendICEResponse  fromId _)   = "Send ICE Candidate from " ++ show fromId
   show (StartCallResponse fromId)    = "Start Call from " ++ show fromId
+  show (AcceptCallResponse fromId)   = "Accept Call from " ++ show fromId
 
 kind :: ResponseData -> T.Text
 kind (ServerStateResponse _) = "clients"
@@ -160,6 +170,7 @@ kind (ConnectionNotify _) = "notify"
 kind (OfferSDPResponse _ _) = "offer"
 kind (SendICEResponse _ _) = "ice"
 kind (StartCallResponse _) = "startcall"
+kind (AcceptCallResponse _) = "acceptcall"
 
 toJSON' :: KeyValue a => ResponseData -> [a]
 toJSON' (ServerStateResponse clients)     = [ "clients" .= map snd (Map.toList clients) ]
@@ -168,6 +179,7 @@ toJSON' (ConnectionNotify userId')        = [ "user_id" .= show userId' ]
 toJSON' (OfferSDPResponse fromId sdpData) = [ "from" .= show fromId, "sdp"  .= sdpData ]
 toJSON' (SendICEResponse fromId iceData)  = [ "from" .= show fromId, "ice"  .= iceData ]
 toJSON' (StartCallResponse fromId)        = [ "from" .= show fromId ]
+toJSON' (AcceptCallResponse fromId)        = [ "from" .= show fromId ]
 
 instance ToJSON ResponseData where
   toJSON responseData = object $ [ "kind" .= kind responseData ] ++ toJSON' responseData
