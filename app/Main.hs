@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -97,28 +98,26 @@ instance FromJSON RequestData where
 instance Validatable RequestData where
   validate _ = pure ()
 
-instance Performable RequestData Client where
-  perform (Ping targetId) state = do
-    client <- ask
-    clients <- liftIO $ readMVar state
+
+instance Performable RequestData (Client, ServerState) where
+  perform (Ping targetId) _ = do
+    (client, clients) <- ask
     case Map.lookup targetId clients of
       Nothing         -> return ()
       Just targetUser -> liftIO $ send $ BroadcastResponse (ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser) clients
-  perform (Say message) state = do
-    client <- ask
-    clients <- liftIO $ readMVar state
-    liftIO $ send $ BroadcastResponse (ServerMessage $ username client `mappend` ": " `mappend` message) clients
-  perform (OfferSDPRequest targetId sdp) state = do
-    client <- ask
-    clients <- liftIO $ readMVar state
 
+  perform (Say message) _ = do
+    (client, clients) <- ask
+    liftIO $ send $ BroadcastResponse (ServerMessage $ username client `mappend` ": " `mappend` message) clients
+
+  perform (OfferSDPRequest targetId sdp) _ = do
+    (client, clients) <- ask
     case Map.lookup targetId clients of
       Nothing         -> return ()
       Just targetUser -> liftIO $ send $ SingleResponse (OfferSDPResponse (userId client) sdp) (connection targetUser)
-  perform (SendICECandidate targetId ice) state = do
-    client <- ask
-    clients <- liftIO $ readMVar state
 
+  perform (SendICECandidate targetId ice) _ = do
+    (client, clients) <- ask
     case Map.lookup targetId clients of
       Nothing         -> return ()
       Just targetUser -> liftIO $ send $ SingleResponse (SendICEResponse (userId client) ice) (connection targetUser)
@@ -232,7 +231,7 @@ serveConnection client state = do
 
     case runReaderT (ingestData msg) clients of
       Left errorMsg -> send $ SingleResponse (ServerMessage $ T.pack errorMsg) (connection client)
-      Right command -> runReaderT (perform (command :: RequestData) state) client
+      Right command -> runReaderT (perform (command :: RequestData) state) (client, clients)
 
 
 ingestData :: (Validatable r, FromJSON r) => BL.ByteString -> Validation r
