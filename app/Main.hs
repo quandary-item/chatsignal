@@ -81,15 +81,17 @@ instance FromJSON ConnectRequestData where
       _            -> fail ("unknown action " ++ action)
 
 type SDPData = T.Text
-data RequestData = Ping UserID | Say T.Text | OfferSDPRequest UserID SDPData deriving Show
+type ICECandidate = T.Text
+data RequestData = Ping UserID | Say T.Text | OfferSDPRequest UserID SDPData | SendICECandidate UserID ICECandidate deriving Show
 
 instance FromJSON RequestData where
-  parseJSON = withObject "ping or say or offersdprequest" $ \o -> do
+  parseJSON = withObject "ping or say or offersdprequest or sendicecandidate" $ \o -> do
     action <- o .: "action"
     case action of
       "ping"  -> Ping            <$> o .: "target"
       "say"   -> Say             <$> o .: "message"
       "offer" -> OfferSDPRequest <$> o .: "to" <*> o .: "sdp"
+      "ice"   -> SendICECandidate <$> o .: "to" <*> o .: "ice"
       _       -> fail ("unknown action " ++ action)
 
 instance Validatable RequestData where
@@ -113,14 +115,21 @@ instance Performable RequestData Client where
     case Map.lookup targetId clients of
       Nothing         -> return ()
       Just targetUser -> liftIO $ send $ SingleResponse (OfferSDPResponse (userId client) sdp) (connection targetUser)
+  perform (SendICECandidate targetId ice) state = do
+    client <- ask
+    clients <- liftIO $ readMVar state
 
+    case Map.lookup targetId clients of
+      Nothing         -> return ()
+      Just targetUser -> liftIO $ send $ SingleResponse (SendICEResponse (userId client) ice) (connection targetUser)
 
-data ResponseData = ServerStateResponse ServerState | ServerMessage T.Text | ConnectionNotify UserID | OfferSDPResponse UserID SDPData
+data ResponseData = ServerStateResponse ServerState | ServerMessage T.Text | ConnectionNotify UserID | OfferSDPResponse UserID SDPData | SendICEResponse UserID ICECandidate
 instance Show ResponseData where
   show (ServerStateResponse clients) = "Clients: " ++ (T.unpack $ T.intercalate ", " $ map (T.pack . show . fst) $ Map.toList clients)
   show (ServerMessage text)          = "Message: " ++ T.unpack text
   show (ConnectionNotify userId')    = "Notify: "  ++ show userId'
   show (OfferSDPResponse fromId _)   = "Offer SDP Response from " ++ show fromId
+  show (SendICEResponse  fromId _)   = "Send ICE Candidate from " ++ show fromId
 instance ToJSON ResponseData where
   toJSON (ServerStateResponse clients) = object [ "kind"    .= ("clients" :: T.Text)
                                                 , "clients" .= map snd (Map.toList clients)
@@ -134,6 +143,10 @@ instance ToJSON ResponseData where
   toJSON (OfferSDPResponse fromId sdpData) = object [ "kind" .= ("offer" :: T.Text)
                                                     , "from" .= show fromId
                                                     , "sdp"  .= sdpData
+                                                    ]
+  toJSON (SendICEResponse fromId iceData) = object [ "kind" .= ("ice" :: T.Text)
+                                                    , "from" .= show fromId
+                                                    , "ice"  .= iceData
                                                     ]
 
 data Client = Client { username :: T.Text, userId :: UserID, connection :: WS.Connection }
