@@ -168,7 +168,7 @@ instance Show ResponseData where
   show (ServerMessage text)          = "Message: " ++ T.unpack text
   show (ConnectionNotify userId')    = "Notify: "  ++ show userId'
   show (OfferSDPResponse fromId _)   = "Offer SDP Response from " ++ show fromId
-  show (SendICEResponse  fromId _)   = "Send ICE Candidate from " ++ show fromId
+  show (SendICEResponse  fromId iceData)   = "Send ICE Candidate '" ++ (show iceData) ++ "' from " ++ show fromId
   show (StartCallResponse fromId)    = "Start Call from " ++ show fromId
   show (AcceptCallResponse fromId)   = "Accept Call from " ++ show fromId
   show (RejectCallResponse fromId)   = "Reject Call from " ++ show fromId
