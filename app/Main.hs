@@ -7,7 +7,6 @@
 module Main where
 import Data.Aeson
 import Data.Char (isPunctuation, isSpace)
-import qualified Data.Map.Strict as Map
 import Data.Monoid (mappend)
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Control.Monad (forM_, forever)
@@ -18,7 +17,7 @@ import qualified Data.Text as T
 import Control.Monad.Reader
 import qualified Network.WebSockets as WS
 
-import ServerState (ServerState, Client(..), userId, connection, username, addClient, removeClient, newServerState, clientExistsWithUsername)
+import ServerState (ServerState, Client(..), userId, connection, username, addClient, removeClient, newServerState, clientExistsWithUsername, clientIdList, clientList, lookupClientById)
 import UserID (UserID, makeRandomUserID)
 import Util (assertM, dupe)
 
@@ -117,7 +116,7 @@ instance Validatable RequestData where
 instance Performable RequestData (Client, ServerState) where
   perform (Ping targetId) _ = do
     (client, clients) <- ask
-    case Map.lookup targetId clients of
+    case lookupClientById targetId clients of
       Nothing         -> return ()
       Just targetUser -> sendIO $ BroadcastResponse (ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser) clients
 
@@ -127,31 +126,31 @@ instance Performable RequestData (Client, ServerState) where
 
   perform (OfferSDPRequest targetId sdp) _ = do
     (client, clients) <- ask
-    case Map.lookup targetId clients of
+    case lookupClientById targetId clients of
       Nothing         -> return ()
       Just targetUser -> sendIO $ SingleResponse (OfferSDPResponse (userId client) sdp) (connection targetUser)
 
   perform (SendICECandidate targetId ice) _ = do
     (client, clients) <- ask
-    case Map.lookup targetId clients of
+    case lookupClientById targetId clients of
       Nothing         -> return ()
       Just targetUser -> sendIO $ SingleResponse (SendICEResponse (userId client) ice) (connection targetUser)
 
   perform (StartCall targetId) _ = do
     (client, clients) <- ask
-    case Map.lookup targetId clients of
+    case lookupClientById targetId clients of
       Nothing         -> return ()
       Just targetUser -> sendIO $ SingleResponse (StartCallResponse (userId client)) (connection targetUser)
 
   perform (AcceptCall targetId) _ = do
     (client, clients) <- ask
-    case Map.lookup targetId clients of
+    case lookupClientById targetId clients of
       Nothing         -> return ()
       Just targetUser -> sendIO $ SingleResponse (AcceptCallResponse (userId client)) (connection targetUser)
 
   perform (RejectCall targetId) _ = do
     (client, clients) <- ask
-    case Map.lookup targetId clients of
+    case lookupClientById targetId clients of
       Nothing         -> return ()
       Just targetUser -> sendIO $ SingleResponse (RejectCallResponse (userId client)) (connection targetUser)
 
@@ -165,7 +164,7 @@ data ResponseData = ServerStateResponse ServerState
                   | AcceptCallResponse UserID
                   | RejectCallResponse UserID
 instance Show ResponseData where
-  show (ServerStateResponse clients) = "Clients: " ++ (T.unpack $ T.intercalate ", " $ map (T.pack . show . fst) $ Map.toList clients)
+  show (ServerStateResponse clients) = "Clients: " ++ (T.unpack $ T.intercalate ", " $ map (T.pack . show) $ clientIdList clients)
   show (ServerMessage text)          = "Message: " ++ T.unpack text
   show (ConnectionNotify userId')    = "Notify: "  ++ show userId'
   show (OfferSDPResponse fromId _)   = "Offer SDP Response from " ++ show fromId
@@ -185,7 +184,7 @@ kind (AcceptCallResponse _) = "acceptcall"
 kind (RejectCallResponse _) = "rejectcall"
 
 toJSON' :: KeyValue a => ResponseData -> [a]
-toJSON' (ServerStateResponse clients)     = [ "clients" .= map snd (Map.toList clients) ]
+toJSON' (ServerStateResponse clients)     = [ "clients" .= clientList clients ]
 toJSON' (ServerMessage text)              = [ "data" .= text ]
 toJSON' (ConnectionNotify userId')        = [ "user_id" .= show userId' ]
 toJSON' (OfferSDPResponse fromId sdpData) = [ "from" .= show fromId, "sdp"  .= sdpData ]
@@ -196,8 +195,6 @@ toJSON' (RejectCallResponse fromId)        = [ "from" .= show fromId ]
 
 instance ToJSON ResponseData where
   toJSON responseData = object $ [ "kind" .= kind responseData ] ++ toJSON' responseData
-
-
 
 
 isValidUsername :: T.Text -> Bool
@@ -216,7 +213,7 @@ disconnect userId' state = do
   currentState <- readMVar state
   putStrLn $ show currentState
 
-  case Map.lookup userId' currentState of
+  case lookupClientById userId' currentState of
     Nothing -> return ()
     Just client -> do
       s <- modifyMVar state $ pure . dupe . (removeClient userId')

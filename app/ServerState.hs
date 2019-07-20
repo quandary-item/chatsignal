@@ -36,3 +36,12 @@ addClient client = Map.insert (userId client) client
 
 removeClient :: UserID -> ServerState -> ServerState
 removeClient = Map.delete
+
+clientIdList :: ServerState -> [UserID]
+clientIdList = (map fst) . Map.toList
+
+clientList :: ServerState -> [Client]
+clientList = (map snd) . Map.toList
+
+lookupClientById :: UserID -> ServerState -> Maybe Client
+lookupClientById = Map.lookup
