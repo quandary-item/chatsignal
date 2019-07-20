@@ -30,34 +30,18 @@ class Validatable r where
 class Performable r a | r -> a where
   perform :: r -> MVar ServerState -> ReaderT a IO ()
 
-class Response r where
-  send :: r -> IO ()
 
--- mtl-friendly send method
-sendIO :: (MonadIO m, Response r) => r -> m ()
-sendIO = liftIO . send
+sendSingle :: (ToJSON a, Show a) => a -> WS.Connection -> IO ()
+sendSingle responseData conn = do
+  putStrLn $ "Response: " ++ show responseData
+  WS.sendTextData conn message
+    where message = encode responseData
 
-
-data SingleResponse = SingleResponse ResponseData WS.Connection
-instance Response SingleResponse where
-  send response@(SingleResponse responseData conn) = do
-    putStrLn $ show response
-    WS.sendTextData conn message
-      where message = encode responseData
-
-instance Show SingleResponse where
-  show (SingleResponse responseData _) = "Response: " ++ show responseData
-
-
-data BroadcastResponse = BroadcastResponse ResponseData ServerState
-instance Response BroadcastResponse where
-  send response@(BroadcastResponse responseData clients) = do
-    putStrLn $ show response
-    forM_ clients $ \client -> WS.sendTextData (connection client) message
-      where message = encode responseData
-
-instance Show BroadcastResponse where
-  show (BroadcastResponse responseData _) = "Broadcast: " ++ show responseData
+sendBroadcast :: (ToJSON a, Show a) => a -> ServerState -> IO ()
+sendBroadcast responseData clients = do
+  putStrLn $ "Broadcast: " ++ show responseData
+  forM_ clients $ \client -> WS.sendTextData (connection client) message
+    where message = encode responseData
 
 
 data ConnectRequestData = Connect T.Text deriving Show
@@ -118,41 +102,41 @@ instance Performable RequestData (Client, ServerState) where
     (client, clients) <- ask
     case lookupClientById targetId clients of
       Nothing         -> return ()
-      Just targetUser -> sendIO $ BroadcastResponse (ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser) clients
+      Just targetUser -> liftIO $ sendBroadcast (ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser) clients
 
   perform (Say message) _ = do
     (client, clients) <- ask
-    sendIO $ BroadcastResponse (ServerMessage $ username client `mappend` ": " `mappend` message) clients
+    liftIO $ sendBroadcast (ServerMessage $ username client `mappend` ": " `mappend` message) clients
 
   perform (OfferSDPRequest targetId sdp) _ = do
     (client, clients) <- ask
     case lookupClientById targetId clients of
       Nothing         -> return ()
-      Just targetUser -> sendIO $ SingleResponse (OfferSDPResponse (userId client) sdp) (connection targetUser)
+      Just targetUser -> liftIO $ sendSingle (OfferSDPResponse (userId client) sdp) (connection targetUser)
 
   perform (SendICECandidate targetId ice) _ = do
     (client, clients) <- ask
     case lookupClientById targetId clients of
       Nothing         -> return ()
-      Just targetUser -> sendIO $ SingleResponse (SendICEResponse (userId client) ice) (connection targetUser)
+      Just targetUser -> liftIO $ sendSingle (SendICEResponse (userId client) ice) (connection targetUser)
 
   perform (StartCall targetId) _ = do
     (client, clients) <- ask
     case lookupClientById targetId clients of
       Nothing         -> return ()
-      Just targetUser -> sendIO $ SingleResponse (StartCallResponse (userId client)) (connection targetUser)
+      Just targetUser -> liftIO $ sendSingle (StartCallResponse (userId client)) (connection targetUser)
 
   perform (AcceptCall targetId) _ = do
     (client, clients) <- ask
     case lookupClientById targetId clients of
       Nothing         -> return ()
-      Just targetUser -> sendIO $ SingleResponse (AcceptCallResponse (userId client)) (connection targetUser)
+      Just targetUser -> liftIO $ sendSingle (AcceptCallResponse (userId client)) (connection targetUser)
 
   perform (RejectCall targetId) _ = do
     (client, clients) <- ask
     case lookupClientById targetId clients of
       Nothing         -> return ()
-      Just targetUser -> sendIO $ SingleResponse (RejectCallResponse (userId client)) (connection targetUser)
+      Just targetUser -> liftIO $ sendSingle (RejectCallResponse (userId client)) (connection targetUser)
 
 
 data ResponseData = ServerStateResponse ServerState
@@ -217,22 +201,22 @@ disconnect userId' state = do
     Nothing -> return ()
     Just client -> do
       s <- modifyMVar state $ pure . dupe . (removeClient userId')
-      send $ BroadcastResponse (ServerMessage $ username client `mappend` " disconnected") s
+      sendBroadcast (ServerMessage $ username client `mappend` " disconnected") s
 
 
 connectClient :: Client -> ServerState -> IO ServerState
 connectClient client clients = do
   -- Send a welcome / motd
-  send $ SingleResponse (ServerMessage "Welcome to One Hour Chat!") (connection client)
+  sendSingle (ServerMessage "Welcome to One Hour Chat!") (connection client)
   -- Tell the client what their user id is
-  send $ SingleResponse (ConnectionNotify (userId client)) (connection client)
+  sendSingle (ConnectionNotify (userId client)) (connection client)
 
   -- Add the new client to the state
   let newClients = addClient client clients
 
   -- Notify everyone that the party has officially started
-  send $ BroadcastResponse (ServerMessage $ username client `mappend` " joined") clients
-  send $ BroadcastResponse (ServerStateResponse newClients) newClients
+  sendBroadcast (ServerMessage $ username client `mappend` " joined") clients
+  sendBroadcast (ServerStateResponse newClients) newClients
 
   -- return the updated list of clients
   pure newClients
@@ -250,7 +234,7 @@ serveConnection client state = do
     clients <- readMVar $ state
 
     case runReaderT (ingestData msg) clients of
-      Left errorMsg -> send $ SingleResponse (ServerMessage $ T.pack errorMsg) (connection client)
+      Left errorMsg -> sendSingle (ServerMessage $ T.pack errorMsg) (connection client)
       Right command -> runReaderT (perform (command :: RequestData) state) (client, clients)
 
 
@@ -274,7 +258,7 @@ application state pending = do
     clients <- readMVar state
 
     case runReaderT (ingestData msg) clients of
-      Left errorMsg -> send $ SingleResponse (ServerMessage $ T.pack errorMsg) conn
+      Left errorMsg -> sendSingle (ServerMessage $ T.pack errorMsg) conn
       Right command -> runReaderT (perform (command :: ConnectRequestData) state) conn
 
 
