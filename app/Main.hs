@@ -303,7 +303,7 @@ serveConnection client state = do
           attempt msg client clients state doAcceptCall
         "rejectcall" -> do
           attempt msg client clients state doRejectCall
-        _ -> Left $ "Unrecognised action: " ++ (T.unpack action)
+        _ -> Left $ unknownActionErrorMsg ++ (T.unpack action)
 
 
 attempt :: (Request r) => BL.ByteString -> Client -> ServerState -> MVar ServerState -> (r -> MVar ServerState -> ReaderT (Client, ServerState) IO ()) -> Either String (IO ())
@@ -353,7 +353,7 @@ application state pending = do
         "connect" -> do
           command <- ingestData msg clients :: Either String ConnectRequestData
           pure $ runReaderT (doConnect command state) conn
-        _ -> Left $ "Unrecognised action: " ++ (T.unpack action)
+        _ -> Left $ unknownActionErrorMsg ++ (T.unpack action)
 
 main :: IO ()
 main = do
