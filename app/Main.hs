@@ -46,8 +46,6 @@ data ConnectRequestData = Connect T.Text deriving Show
 instance Request ConnectRequestData where
   parseObject o = Connect <$> o .: "username"
   validate (Connect providedUsername) clients = do
-    clients <- ask
-
     assertM invalidUsernameErrorMessage $ isValidUsername providedUsername
     assertM usernameIsTakenErrorMessage $ not $ clientExistsWithUsername providedUsername clients
 
@@ -353,7 +351,7 @@ application state pending = do
       (Action action) <- getAction msg
       case action of
         "connect" -> do
-          command <- runReaderT (ingestData msg) clients :: Either String ConnectRequestData
+          command <- ingestData msg clients :: Either String ConnectRequestData
           pure $ runReaderT (doConnect command state) conn
         _ -> Left $ "Unrecognised action: " ++ (T.unpack action)
 
