@@ -13,7 +13,6 @@ import Data.Monoid (mappend)
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Control.Monad (forM_, forever)
 import Control.Monad.Catch (finally)
-import Control.Monad.Except (liftEither)
 import Control.Concurrent (MVar, newMVar, modifyMVar, modifyMVar_, readMVar)
 import qualified Data.Text as T
 import Control.Monad.Reader
@@ -49,15 +48,13 @@ instance Request ConnectRequestData where
     assertM invalidUsernameErrorMessage $ isValidUsername providedUsername
     assertM usernameIsTakenErrorMessage $ not $ clientExistsWithUsername providedUsername clients
 
-doConnect :: ConnectRequestData -> MVar ServerState -> ReaderT WS.Connection IO ()
-doConnect (Connect providedUsername) state = do
-  conn <- ask
-  -- Create a user id
-  newUserId <- liftIO $ makeRandomUserID
-  -- Create the actual client
-  let client = Client { username = providedUsername, userId = newUserId, connection = conn }
-
-  (liftIO $ serveConnection client state) `finally` (liftIO $ disconnect (newUserId) state)
+instance Performable ConnectRequestData WS.Connection where
+  perform conn (Connect providedUsername) state = do
+    -- Create a user id
+    newUserId <- liftIO $ makeRandomUserID
+    -- Create the actual client
+    let client = Client { username = providedUsername, userId = newUserId, connection = conn }
+    (liftIO $ serveConnection client state) `finally` (liftIO $ disconnect (newUserId) state)
 
 
 type SDPData = T.Text
@@ -85,9 +82,8 @@ instance Request Ping where
   parseObject o = Ping <$> o .: "target"
   validate _ _ = pure ()
 
-doPing :: Ping -> MVar ServerState -> ReaderT (Client, ServerState) IO ()
-doPing (Ping targetId) _ = do
-    (client, clients) <- ask
+doPing :: (Client, ServerState) -> Ping -> MVar ServerState -> IO ()
+doPing (client, clients) (Ping targetId) _ = do
     case lookupClientById targetId clients of
       Nothing         -> return ()
       Just targetUser -> liftIO $ sendBroadcast (ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser) clients
@@ -97,65 +93,60 @@ instance Request Say where
   parseObject o = Say <$> o .: "message"
   validate _ _ = pure ()
 
-doSay :: Say -> MVar ServerState -> ReaderT (Client, ServerState) IO ()
-doSay (Say message) _ = do
-  (client, clients) <- ask
-  liftIO $ sendBroadcast (ServerMessage $ username client `mappend` ": " `mappend` message) clients
+instance Performable Say (Client, ServerState) where
+  perform (client, clients) (Say message) _ = do
+    liftIO $ sendBroadcast (ServerMessage $ username client `mappend` ": " `mappend` message) clients
 
 
 instance Request OfferSDPRequest where
   parseObject o = OfferSDPRequest <$> o .: "to" <*> o .: "sdp"
   validate _ _ = pure ()
 
-doOfferSDPRequest :: OfferSDPRequest -> MVar ServerState -> ReaderT (Client, ServerState) IO ()
-doOfferSDPRequest (OfferSDPRequest targetId sdp) _ = do
-  (client, clients) <- ask
-  case lookupClientById targetId clients of
-    Nothing         -> return ()
-    Just targetUser -> liftIO $ sendSingle (OfferSDPResponse (userId client) sdp) (connection targetUser)
+instance Performable OfferSDPRequest (Client, ServerState) where
+  perform (client, clients) (OfferSDPRequest targetId sdp) _ = do
+    case lookupClientById targetId clients of
+      Nothing         -> return ()
+      Just targetUser -> liftIO $ sendSingle (OfferSDPResponse (userId client) sdp) (connection targetUser)
 
 instance Request SendICECandidate where
   parseObject o = SendICECandidate <$> o .: "to" <*> o .: "ice"
   validate _ _ = pure ()
 
-doSendICECandidate :: SendICECandidate -> MVar ServerState -> ReaderT (Client, ServerState) IO ()
-doSendICECandidate (SendICECandidate targetId ice) _ = do
-  (client, clients) <- ask
-  case lookupClientById targetId clients of
-    Nothing         -> return ()
-    Just targetUser -> liftIO $ sendSingle (SendICEResponse (userId client) ice) (connection targetUser)
+instance Performable SendICECandidate (Client, ServerState) where
+  perform (client, clients) (SendICECandidate targetId ice) _ = do
+    case lookupClientById targetId clients of
+      Nothing         -> return ()
+      Just targetUser -> liftIO $ sendSingle (SendICEResponse (userId client) ice) (connection targetUser)
 
 instance Request StartCall where
   parseObject o = StartCall <$> o .: "to"
   validate _ _ = pure ()
 
-doStartCall :: StartCall -> MVar ServerState -> ReaderT (Client, ServerState) IO ()
-doStartCall (StartCall targetId) _ = do
-  (client, clients) <- ask
-  case lookupClientById targetId clients of
-    Nothing         -> return ()
-    Just targetUser -> liftIO $ sendSingle (StartCallResponse (userId client)) (connection targetUser)
+instance Performable StartCall (Client, ServerState) where
+  perform (client, clients) (StartCall targetId) _ = do
+    case lookupClientById targetId clients of
+      Nothing         -> return ()
+      Just targetUser -> liftIO $ sendSingle (StartCallResponse (userId client)) (connection targetUser)
 
 instance Request AcceptCall where
   parseObject o = AcceptCall <$> o .: "to"
   validate _ _ = pure ()
 
-doAcceptCall :: AcceptCall -> MVar ServerState -> ReaderT (Client, ServerState) IO ()
-doAcceptCall (AcceptCall targetId) _ = do
-  (client, clients) <- ask
-  case lookupClientById targetId clients of
-    Nothing         -> return ()
-    Just targetUser -> liftIO $ sendSingle (AcceptCallResponse (userId client)) (connection targetUser)
+instance Performable AcceptCall (Client, ServerState) where
+  perform (client, clients) (AcceptCall targetId) _ = do
+    case lookupClientById targetId clients of
+      Nothing         -> return ()
+      Just targetUser -> liftIO $ sendSingle (AcceptCallResponse (userId client)) (connection targetUser)
 
 instance Request RejectCall where
   parseObject o = RejectCall <$> o .: "to"
   validate _ _ = pure ()
-doRejectCall :: RejectCall -> MVar ServerState -> ReaderT (Client, ServerState) IO ()
-doRejectCall (RejectCall targetId) _ = do
-  (client, clients) <- ask
-  case lookupClientById targetId clients of
-    Nothing         -> return ()
-    Just targetUser -> liftIO $ sendSingle (RejectCallResponse (userId client)) (connection targetUser)
+
+instance Performable RejectCall (Client, ServerState) where
+  perform (client, clients) (RejectCall targetId) _ = do
+    case lookupClientById targetId clients of
+      Nothing         -> return ()
+      Just targetUser -> liftIO $ sendSingle (RejectCallResponse (userId client)) (connection targetUser)
 
 
 data ServerStateResponse = ServerStateResponse ServerState
@@ -273,6 +264,14 @@ connectClient client clients = do
   -- return the updated list of clients
   pure newClients
 
+class Performable a b | a -> b where
+  perform :: b -> a -> MVar ServerState -> IO ()
+
+instance Performable Ping (Client, ServerState) where
+  perform (client, clients) (Ping targetId) _ = do
+    case lookupClientById targetId clients of
+      Nothing         -> return ()
+      Just targetUser -> liftIO $ sendBroadcast (ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser) clients
 
 serveConnection :: Client -> MVar ServerState -> IO ()
 serveConnection client state = do
@@ -290,26 +289,28 @@ serveConnection client state = do
 
       case action of
         "ping" -> do
-          attempt msg client clients state doPing
+          command <- ingestData msg clients
+          pure $ perform (client, clients) (command :: Ping) state
         "say" -> do
-          attempt msg client clients state doSay
+          command <- ingestData msg clients
+          pure $ perform (client, clients) (command :: Say) state
         "offer" -> do
-          attempt msg client clients state doOfferSDPRequest
+          command <- ingestData msg clients
+          pure $ perform (client, clients) (command :: OfferSDPRequest) state
         "ice" -> do
-          attempt msg client clients state doSendICECandidate
+          command <- ingestData msg clients
+          pure $ perform (client, clients) (command :: SendICECandidate) state
         "startcall" -> do
-          attempt msg client clients state doStartCall
+          command <- ingestData msg clients
+          pure $ perform (client, clients) (command :: StartCall) state
         "acceptcall" -> do
-          attempt msg client clients state doAcceptCall
+          command <- ingestData msg clients
+          pure $ perform (client, clients) (command :: AcceptCall) state
         "rejectcall" -> do
-          attempt msg client clients state doRejectCall
+          command <- ingestData msg clients
+          pure $ perform (client, clients) (command :: RejectCall) state
         _ -> Left $ unknownActionErrorMsg ++ (T.unpack action)
 
-
-attempt :: (Request r) => BL.ByteString -> Client -> ServerState -> MVar ServerState -> (r -> MVar ServerState -> ReaderT (Client, ServerState) IO ()) -> Either String (IO ())
-attempt msg client clients state doThing = do
-  command <- ingestData msg clients
-  pure $ runReaderT (doThing command state) (client, clients)
 
 ingestData :: (Request r) => BL.ByteString -> ServerState -> Either String r
 ingestData msg clients = do
@@ -352,7 +353,7 @@ application state pending = do
       case action of
         "connect" -> do
           command <- ingestData msg clients :: Either String ConnectRequestData
-          pure $ runReaderT (doConnect command state) conn
+          pure $ perform conn command state
         _ -> Left $ unknownActionErrorMsg ++ (T.unpack action)
 
 main :: IO ()
