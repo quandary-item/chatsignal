@@ -99,12 +99,13 @@ instance Request ConnectRequestData where
 
 instance Performable ConnectRequestData (WS.Connection, Client -> MVar ServerState -> IO ()) where
   perform (conn, handler) (Connect providedUsername) state = do
+    putStrLn $ T.unpack providedUsername
     -- Create a user id
-    newUserId <- liftIO $ makeRandomUserID
+    newUserId <- makeRandomUserID
     -- Create the actual client
     let client = Client { username = providedUsername, userId = newUserId, connection = conn }
 
-    flip finally (liftIO $ disconnect (newUserId) state) $ do
+    flip finally (disconnect (newUserId) state) $ do
       -- Connect the client by updating the state
       modifyMVar_ state $ connectClient client
       forever $ (handler client state)
@@ -127,7 +128,7 @@ instance Performable Ping (Client, ServerState) where
   perform (client, clients) (Ping targetId) _ = do
     case lookupClientById targetId clients of
       Nothing         -> return ()
-      Just targetUser -> liftIO $ sendBroadcast (ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser) clients
+      Just targetUser -> sendBroadcast (ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser) clients
 
 
 instance Request Say where
@@ -136,7 +137,7 @@ instance Request Say where
 
 instance Performable Say (Client, ServerState) where
   perform (client, clients) (Say message) _ = do
-    liftIO $ sendBroadcast (ServerMessage $ username client `mappend` ": " `mappend` message) clients
+    sendBroadcast (ServerMessage $ username client `mappend` ": " `mappend` message) clients
 
 
 instance Request OfferSDPRequest where
@@ -147,7 +148,7 @@ instance Performable OfferSDPRequest (Client, ServerState) where
   perform (client, clients) (OfferSDPRequest targetId sdp) _ = do
     case lookupClientById targetId clients of
       Nothing         -> return ()
-      Just targetUser -> liftIO $ sendSingle (OfferSDPResponse (userId client) sdp) (connection targetUser)
+      Just targetUser -> sendSingle (OfferSDPResponse (userId client) sdp) (connection targetUser)
 
 instance Request SendICECandidate where
   parseObject o = SendICECandidate <$> o .: "to" <*> o .: "ice"
@@ -157,7 +158,7 @@ instance Performable SendICECandidate (Client, ServerState) where
   perform (client, clients) (SendICECandidate targetId ice) _ = do
     case lookupClientById targetId clients of
       Nothing         -> return ()
-      Just targetUser -> liftIO $ sendSingle (SendICEResponse (userId client) ice) (connection targetUser)
+      Just targetUser -> sendSingle (SendICEResponse (userId client) ice) (connection targetUser)
 
 instance Request StartCall where
   parseObject o = StartCall <$> o .: "to"
@@ -167,7 +168,7 @@ instance Performable StartCall (Client, ServerState) where
   perform (client, clients) (StartCall targetId) _ = do
     case lookupClientById targetId clients of
       Nothing         -> return ()
-      Just targetUser -> liftIO $ sendSingle (StartCallResponse (userId client)) (connection targetUser)
+      Just targetUser -> sendSingle (StartCallResponse (userId client)) (connection targetUser)
 
 instance Request AcceptCall where
   parseObject o = AcceptCall <$> o .: "to"
@@ -177,7 +178,7 @@ instance Performable AcceptCall (Client, ServerState) where
   perform (client, clients) (AcceptCall targetId) _ = do
     case lookupClientById targetId clients of
       Nothing         -> return ()
-      Just targetUser -> liftIO $ sendSingle (AcceptCallResponse (userId client)) (connection targetUser)
+      Just targetUser -> sendSingle (AcceptCallResponse (userId client)) (connection targetUser)
 
 instance Request RejectCall where
   parseObject o = RejectCall <$> o .: "to"
@@ -187,4 +188,4 @@ instance Performable RejectCall (Client, ServerState) where
   perform (client, clients) (RejectCall targetId) _ = do
     case lookupClientById targetId clients of
       Nothing         -> return ()
-      Just targetUser -> liftIO $ sendSingle (RejectCallResponse (userId client)) (connection targetUser)
+      Just targetUser -> sendSingle (RejectCallResponse (userId client)) (connection targetUser)

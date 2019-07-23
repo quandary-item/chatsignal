@@ -68,7 +68,7 @@ logError errorMsg = sendSingle (ServerMessage $ T.pack errorMsg)
 onFail :: (Monad m) => (String -> m ()) -> Either String (m ()) -> m ()
 onFail logMessage f = case f of
   Left errorMsg -> logMessage errorMsg
-  Right _ -> pure ()
+  Right monad -> monad
 
 unknownActionErrorMsg :: String
 unknownActionErrorMsg = "Unrecognised action: "
