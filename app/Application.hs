@@ -5,7 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Application where
+module Application (createInitialState, application, MutableServerState) where
 
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as BL
@@ -17,6 +17,8 @@ import ServerState (ServerState, Client(..), connection, newServerState)
 
 import Responses(sendSingle, ServerMessage(..))
 import Requests(Ping, Say, OfferSDPRequest, SendICECandidate, StartCall, AcceptCall, RejectCall, ConnectRequestData, perform, ingestData)
+
+type MutableServerState = MVar ServerState
 
 data SelectedAction = Action T.Text
 instance FromJSON SelectedAction where
@@ -74,7 +76,7 @@ onFail logMessage f = case f of
 unknownActionErrorMsg :: String
 unknownActionErrorMsg = "Unrecognised action: "
 
-createInitialState :: IO (MVar ServerState)
+createInitialState :: IO (MutableServerState)
 createInitialState = newMVar newServerState
 
 application :: MVar ServerState -> WS.ServerApp
