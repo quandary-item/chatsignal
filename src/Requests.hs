@@ -11,9 +11,7 @@ module Requests where
 import Control.Concurrent (MVar, modifyMVar, modifyMVar_, readMVar)
 import Control.Monad (forever)
 import Control.Monad.Catch (finally)
-import Control.Monad.Reader (liftIO)
 import Data.Aeson
-import Data.Aeson.Types (Parser)
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Data.Char (isPunctuation, isSpace)
 import qualified Data.Text as T
