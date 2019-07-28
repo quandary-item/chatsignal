@@ -7,6 +7,7 @@
 
 module Application (createInitialState, application, MutableServerState) where
 
+import System.IO
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Control.Concurrent (MVar, newMVar, readMVar)
@@ -96,12 +97,21 @@ serveApplication addr state conn = do
           pure $ perform (conn, serveConnection) command state
         _ -> Left $ unknownActionErrorMsg ++ (T.unpack action)
 
+banListName :: String
+banListName = "ban_list.txt"
+
+getBanList :: String -> IO [BL.ByteString]
+getBanList path = withFile path ReadMode $ \handle -> do
+  contents <- hGetContents handle
+  pure $ map BL.pack $ lines contents
 
 application :: BL.ByteString -> MVar ServerState -> WS.ServerApp
 application addr state pending = do
     conn <- WS.acceptRequest pending
     WS.forkPingThread conn 30
 
-    case (isBanned addr) of
+    banList <- getBanList banListName
+
+    case (addr `elem` banList) of
       True -> sendSingle (BannedResponse) conn
       _    -> serveApplication addr state conn
