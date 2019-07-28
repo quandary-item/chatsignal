@@ -7,7 +7,6 @@
 
 module Application (createInitialState, application, MutableServerState) where
 
-import System.IO
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Control.Concurrent (MVar, newMVar, readMVar)
@@ -101,8 +100,8 @@ banListName :: String
 banListName = "ban_list.txt"
 
 getBanList :: String -> IO [BL.ByteString]
-getBanList path = withFile path ReadMode $ \handle -> do
-  contents <- hGetContents handle
+getBanList path = do
+  contents <- readFile path
   pure $ map BL.pack $ lines contents
 
 application :: BL.ByteString -> MVar ServerState -> WS.ServerApp
@@ -113,5 +112,7 @@ application addr state pending = do
     banList <- getBanList banListName
 
     case (addr `elem` banList) of
-      True -> sendSingle (BannedResponse) conn
+      True -> do
+        putStrLn $ (BL.unpack addr) ++ " tried to log in but is marked as banned"
+        sendSingle (BannedResponse) conn
       _    -> serveApplication addr state conn
