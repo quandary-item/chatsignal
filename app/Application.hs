@@ -79,8 +79,8 @@ unknownActionErrorMsg = "Unrecognised action: "
 createInitialState :: IO (MutableServerState)
 createInitialState = newMVar newServerState
 
-application :: MVar ServerState -> WS.ServerApp
-application state pending = do
+application :: BL.ByteString -> MVar ServerState -> WS.ServerApp
+application addr state pending = do
     conn <- WS.acceptRequest pending
     WS.forkPingThread conn 30
 
