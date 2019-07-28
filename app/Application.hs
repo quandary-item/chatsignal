@@ -82,10 +82,6 @@ createInitialState = newMVar newServerState
 isBanned :: BL.ByteString -> Bool
 isBanned _ = True
 
-serveBanned :: BL.ByteString -> WS.Connection -> IO ()
-serveBanned _ conn = do
-    sendSingle (BannedResponse) conn
-
 serveApplication :: BL.ByteString -> MVar ServerState -> WS.Connection -> IO ()
 serveApplication addr state conn = do
     msg <- WS.receiveData conn
@@ -107,5 +103,5 @@ application addr state pending = do
     WS.forkPingThread conn 30
 
     case (isBanned addr) of
-      True -> serveBanned addr conn
+      True -> sendSingle (BannedResponse) conn
       _    -> serveApplication addr state conn
