@@ -15,7 +15,7 @@ import qualified Network.WebSockets as WS
 
 import ServerState (ServerState, Client(..), connection, newServerState)
 
-import Responses(sendSingle, ServerMessage(..))
+import Responses(sendSingle, ServerMessage(..), BannedResponse(..))
 import Requests(Ping, Say, OfferSDPRequest, SendICECandidate, StartCall, AcceptCall, RejectCall, ConnectRequestData, perform, ingestData)
 
 type MutableServerState = MVar ServerState
@@ -79,11 +79,15 @@ unknownActionErrorMsg = "Unrecognised action: "
 createInitialState :: IO (MutableServerState)
 createInitialState = newMVar newServerState
 
-application :: BL.ByteString -> MVar ServerState -> WS.ServerApp
-application addr state pending = do
-    conn <- WS.acceptRequest pending
-    WS.forkPingThread conn 30
+isBanned :: BL.ByteString -> Bool
+isBanned _ = True
 
+serveBanned :: BL.ByteString -> WS.Connection -> IO ()
+serveBanned _ conn = do
+    sendSingle (BannedResponse) conn
+
+serveApplication :: BL.ByteString -> MVar ServerState -> WS.Connection -> IO ()
+serveApplication addr state conn = do
     msg <- WS.receiveData conn
 
     clients <- readMVar state
@@ -95,3 +99,13 @@ application addr state pending = do
           command <- ingestData msg clients :: Either String ConnectRequestData
           pure $ perform (conn, serveConnection) command state
         _ -> Left $ unknownActionErrorMsg ++ (T.unpack action)
+
+
+application :: BL.ByteString -> MVar ServerState -> WS.ServerApp
+application addr state pending = do
+    conn <- WS.acceptRequest pending
+    WS.forkPingThread conn 30
+
+    case (isBanned addr) of
+      True -> serveBanned addr conn
+      _    -> serveApplication addr state conn

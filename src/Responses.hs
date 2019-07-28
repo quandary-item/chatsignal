@@ -29,6 +29,8 @@ data SendICEResponse = SendICEResponse UserID ICECandidate
 data StartCallResponse = StartCallResponse UserID
 data AcceptCallResponse = AcceptCallResponse UserID
 data RejectCallResponse = RejectCallResponse UserID
+data BannedResponse = BannedResponse
+
 
 instance Show ServerStateResponse where
   show (ServerStateResponse clients) = "Clients: " ++ (T.unpack $ T.intercalate ", " $ map (T.pack . show) $ clientIdList clients)
@@ -53,6 +55,9 @@ instance Show AcceptCallResponse where
 
 instance Show RejectCallResponse where
   show (RejectCallResponse fromId)   = "Reject Call from " ++ show fromId
+
+instance Show BannedResponse where
+  show (BannedResponse) = "User is banned"
 
 instance JSONResponse ServerStateResponse where
   kind _ = "clients"
@@ -85,6 +90,10 @@ instance JSONResponse AcceptCallResponse where
 instance JSONResponse RejectCallResponse where
   kind _ = "rejectcall"
   toValue (RejectCallResponse fromId)        = [ "from" .= show fromId ]
+
+instance JSONResponse BannedResponse where
+  kind _ = "banned"
+  toValue (BannedResponse) = []
 
 
 -- Methods for returning responses
