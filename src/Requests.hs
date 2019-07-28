@@ -1,3 +1,6 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -14,6 +17,7 @@ import Data.Aeson.Types (Parser)
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Data.Char (isPunctuation, isSpace)
 import qualified Data.Text as T
+import GHC.Generics
 import qualified Network.WebSockets as WS
 
 import Responses (ConnectionNotify(..), ServerStateResponse(..), ServerMessage(..), OfferSDPResponse(..), SendICEResponse(..), StartCallResponse(..), AcceptCallResponse(..), RejectCallResponse(..), sendSingle, sendBroadcast)
@@ -24,24 +28,17 @@ import WebRTC (SDPData, ICECandidate)
 
 
 class Request a where
-  parseObject :: Object -> (Parser a)
   validate :: a -> ServerState -> Either String ()
-
-newtype WrappedFromJSON a = WrapFromJSON { unwrapFromJSON :: a }
-
-instance (Request a) => FromJSON (WrappedFromJSON a) where
-  parseJSON = withObject "request" $ \o -> do
-    fmap WrapFromJSON $ parseObject o
 
 class Performable a b | a -> b where
   perform :: b -> a -> MVar ServerState -> IO ()
 
 
-ingestData :: (Request r) => BL.ByteString -> ServerState -> Either String r
+ingestData :: (FromJSON r, Request r) => BL.ByteString -> ServerState -> Either String r
 ingestData msg clients = do
   -- decode the request
   command <- eitherDecode $ msg
-  let unwrappedCommand = unwrapFromJSON command
+  let unwrappedCommand = command
   -- validate the request data
   validate unwrappedCommand clients
   -- if successful, return the command
@@ -56,30 +53,30 @@ disconnect userId' state = do
 
   case lookupClientById userId' currentState of
     Nothing -> return ()
-    Just client -> do
+    Just (Client { username = clientUsername }) -> do
       s <- modifyMVar state $ pure . dupe . (removeClient userId')
-      sendBroadcast (ServerMessage $ username client `mappend` " disconnected") s
+      sendBroadcast (ServerMessage $ clientUsername `mappend` " disconnected") s
 
-
+      
 connectClient :: Client -> ServerState -> IO ServerState
-connectClient client clients = do
+connectClient (client@Client { userId = clientUserId, connection = clientConnection, username = clientUsername }) clients = do
   -- Send a welcome / motd
-  sendSingle (ServerMessage "Welcome to One Hour Chat!") (connection client)
+  sendSingle (ServerMessage "Welcome to One Hour Chat!") clientConnection
   -- Tell the client what their user id is
-  sendSingle (ConnectionNotify (userId client)) (connection client)
+  sendSingle (ConnectionNotify clientUserId) clientConnection
 
   -- Add the new client to the state
   let newClients = addClient client clients
 
   -- Notify everyone that the party has officially started
-  sendBroadcast (ServerMessage $ username client `mappend` " joined") clients
+  sendBroadcast (ServerMessage $ clientUsername `mappend` " joined") clients
   sendBroadcast (ServerStateResponse newClients) newClients
 
   -- return the updated list of clients
   pure newClients
 
     
-data ConnectRequestData = Connect T.Text deriving Show
+data ConnectRequestData = Connect { username :: T.Text } deriving (FromJSON, Generic)
 
 isValidUsername :: T.Text -> Bool
 isValidUsername providedUsername = not $ or (map ($ providedUsername) [T.null, T.any isPunctuation, T.any isSpace])
@@ -92,7 +89,6 @@ usernameIsTakenErrorMessage = "Username is already taken by an existing user"
 
 
 instance Request ConnectRequestData where
-  parseObject o = Connect <$> o .: "username"
   validate (Connect providedUsername) clients = do
     assertM invalidUsernameErrorMessage $ isValidUsername providedUsername
     assertM usernameIsTakenErrorMessage $ not $ clientExistsWithUsername providedUsername clients
@@ -111,37 +107,34 @@ instance Performable ConnectRequestData (WS.Connection, Client -> MVar ServerSta
       forever $ (handler client state)
 
 
-data Ping = Ping UserID
-data Say = Say T.Text
-data OfferSDPRequest = OfferSDPRequest UserID SDPData
-data SendICECandidate = SendICECandidate UserID ICECandidate
-data StartCall = StartCall UserID
-data AcceptCall = AcceptCall UserID
-data RejectCall = RejectCall UserID
+data Ping = Ping { target :: UserID } deriving (FromJSON, Generic)
+data Say = Say { message :: T.Text } deriving (FromJSON, Generic)
+data OfferSDPRequest = OfferSDPRequest { to :: UserID, sdp :: SDPData } deriving (FromJSON, Generic)
+data SendICECandidate = SendICECandidate { to :: UserID, ice ::  ICECandidate } deriving (FromJSON, Generic)
+data StartCall = StartCall { to :: UserID } deriving (FromJSON, Generic)
+data AcceptCall = AcceptCall { to :: UserID } deriving (FromJSON, Generic)
+data RejectCall = RejectCall { to :: UserID } deriving (FromJSON, Generic)
 
 
 instance Request Ping where
-  parseObject o = Ping <$> o .: "target"
   validate _ _ = pure ()
 
 instance Performable Ping (Client, ServerState) where
-  perform (client, clients) (Ping targetId) _ = do
+  perform ((Client { username = clientUsername }), clients) (Ping targetId) _ = do
     case lookupClientById targetId clients of
       Nothing         -> return ()
-      Just targetUser -> sendBroadcast (ServerMessage $ username client `mappend` " pinged " `mappend` username targetUser) clients
+      Just (Client { username = targetUsername }) -> sendBroadcast (ServerMessage $ clientUsername `mappend` " pinged " `mappend` targetUsername) clients
 
 
 instance Request Say where
-  parseObject o = Say <$> o .: "message"
   validate _ _ = pure ()
 
 instance Performable Say (Client, ServerState) where
-  perform (client, clients) (Say message) _ = do
-    sendBroadcast (ServerMessage $ username client `mappend` ": " `mappend` message) clients
+  perform ((Client { username = clientUsername }), clients) (Say message) _ = do
+    sendBroadcast (ServerMessage $ clientUsername `mappend` ": " `mappend` message) clients
 
 
 instance Request OfferSDPRequest where
-  parseObject o = OfferSDPRequest <$> o .: "to" <*> o .: "sdp"
   validate _ _ = pure ()
 
 instance Performable OfferSDPRequest (Client, ServerState) where
@@ -151,7 +144,6 @@ instance Performable OfferSDPRequest (Client, ServerState) where
       Just targetUser -> sendSingle (OfferSDPResponse (userId client) sdp) (connection targetUser)
 
 instance Request SendICECandidate where
-  parseObject o = SendICECandidate <$> o .: "to" <*> o .: "ice"
   validate _ _ = pure ()
 
 instance Performable SendICECandidate (Client, ServerState) where
@@ -161,7 +153,6 @@ instance Performable SendICECandidate (Client, ServerState) where
       Just targetUser -> sendSingle (SendICEResponse (userId client) ice) (connection targetUser)
 
 instance Request StartCall where
-  parseObject o = StartCall <$> o .: "to"
   validate _ _ = pure ()
 
 instance Performable StartCall (Client, ServerState) where
@@ -171,7 +162,6 @@ instance Performable StartCall (Client, ServerState) where
       Just targetUser -> sendSingle (StartCallResponse (userId client)) (connection targetUser)
 
 instance Request AcceptCall where
-  parseObject o = AcceptCall <$> o .: "to"
   validate _ _ = pure ()
 
 instance Performable AcceptCall (Client, ServerState) where
@@ -181,7 +171,6 @@ instance Performable AcceptCall (Client, ServerState) where
       Just targetUser -> sendSingle (AcceptCallResponse (userId client)) (connection targetUser)
 
 instance Request RejectCall where
-  parseObject o = RejectCall <$> o .: "to"
   validate _ _ = pure ()
 
 instance Performable RejectCall (Client, ServerState) where
