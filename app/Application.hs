@@ -17,7 +17,7 @@ import qualified Network.WebSockets as WS
 import BanList (getBanList, addrIsBanned)
 import OneHourClub (isOpen)
 import ServerState (ServerState, Client(..), connection, newServerState)
-import Responses(sendSingle, ServerMessage(..), BannedResponse(..))
+import Responses(sendSingle, ServerMessage(..), BannedResponse(..), OneHourClubClosedResponse(..))
 import Requests(Ping, Say, OfferSDPRequest, SendICECandidate, StartCall, AcceptCall, RejectCall, ConnectRequestData, perform, ingestData)
 
 type MutableServerState = MVar ServerState
@@ -98,31 +98,22 @@ serveApplication addr state conn = do
 banListName :: String
 banListName = "ban_list.txt"
 
-data ConnectionError = OneHourClubIsClosed | IPIsBanned
-
-isOpenM :: IO (Either ConnectionError ())
-isOpenM = do
-  isOpen' <- isOpen
-  pure $ assertErr OneHourClubIsClosed isOpen'
-
-isBannedM :: BL.ByteString -> IO (Either ConnectionError ())
-isBannedM addr = do
-  banList <- getBanList banListName
-  let isNotBanned = addrIsBanned addr banList
-  pure $ assertErr IPIsBanned isNotBanned
-
 application :: BL.ByteString -> MVar ServerState -> WS.ServerApp
 application addr state pending = do
     conn <- WS.acceptRequest pending
     WS.forkPingThread conn 30
+    putStrLn $ BL.unpack addr
 
-    connectionStatus <- (isBannedM addr >> isOpenM)
-    
-    case connectionStatus of
-      Left IPIsBanned -> do
+    banList <- getBanList banListName
+    isOpen' <- isOpen
+
+    case (addrIsBanned addr banList) of
+      True -> do
         putStrLn $ (BL.unpack addr) ++ " tried to log in but is marked as banned"
         sendSingle (BannedResponse) conn
-      Left OneHourClubIsClosed -> do
-        putStrLn $ (BL.unpack addr) ++ " tried to log in but is marked as banned"
-        -- sendSingle () conn
-      Right () -> serveApplication addr state conn
+      False -> do
+        case isOpen' of
+          True -> do
+            putStrLn $ (BL.unpack addr) ++ " tried to log in, but one hour club is closed"
+            sendSingle (OneHourClubClosedResponse) conn
+          False -> serveApplication addr state conn

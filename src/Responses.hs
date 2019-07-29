@@ -20,15 +20,16 @@ data Response a = Response { kind :: T.Text, content :: a } deriving (Generic, T
 class HasKind a where
   kind :: a -> T.Text
 
-data ServerStateResponse = ServerStateResponse { clients :: ServerState } deriving (ToJSON, Generic)
-data ServerMessage = ServerMessage { message :: T.Text } deriving (ToJSON, Generic)
-data ConnectionNotify = ConnectionNotify { user_id :: UserID } deriving (ToJSON, Generic)
-data OfferSDPResponse = OfferSDPResponse { from :: UserID, sdp :: SDPData } deriving (ToJSON, Generic)
-data SendICEResponse = SendICEResponse { from :: UserID, ice :: ICECandidate } deriving (ToJSON, Generic)
-data StartCallResponse = StartCallResponse { from :: UserID } deriving (ToJSON, Generic)
-data AcceptCallResponse = AcceptCallResponse { from :: UserID } deriving (ToJSON, Generic)
-data RejectCallResponse = RejectCallResponse { from :: UserID } deriving (ToJSON, Generic)
-data BannedResponse = BannedResponse deriving (ToJSON, Generic)
+data ServerStateResponse = ServerStateResponse { clients :: ServerState } deriving (Generic, ToJSON, Show)
+data ServerMessage = ServerMessage { message :: T.Text } deriving (Generic, ToJSON, Show)
+data ConnectionNotify = ConnectionNotify { user_id :: UserID } deriving (Generic, ToJSON, Show)
+data OfferSDPResponse = OfferSDPResponse { from :: UserID, sdp :: SDPData } deriving (Generic, ToJSON, Show)
+data SendICEResponse = SendICEResponse { from :: UserID, ice :: ICECandidate } deriving (Generic, ToJSON, Show)
+data StartCallResponse = StartCallResponse { from :: UserID } deriving (Generic, ToJSON, Show)
+data AcceptCallResponse = AcceptCallResponse { from :: UserID } deriving (Generic, ToJSON, Show)
+data RejectCallResponse = RejectCallResponse { from :: UserID } deriving (Generic, ToJSON, Show)
+data BannedResponse = BannedResponse deriving (Generic, ToJSON, Show)
+data OneHourClubClosedResponse = OneHourClubClosedResponse deriving (Generic, ToJSON, Show)
 
 instance HasKind ServerStateResponse where
   kind _ = "clients"
@@ -56,6 +57,9 @@ instance HasKind RejectCallResponse where
 
 instance HasKind BannedResponse where
   kind _ = "banned"
+
+instance HasKind OneHourClubClosedResponse where
+  kind _ = "closed"
 
 -- Methods for returning responses
 
