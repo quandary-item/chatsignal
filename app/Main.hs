@@ -2,7 +2,6 @@
 
 import Application (createInitialState, application)
 
-import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Network.WebSockets.Snap
 import Snap.Core
@@ -15,5 +14,4 @@ main = do
     quickHttpServe $ do
       request <- getRequest
       let addr = BL.fromStrict $ rqClientAddr request
-      liftIO $ putStrLn $ show addr
       runWebSocketsSnap $ application addr state
