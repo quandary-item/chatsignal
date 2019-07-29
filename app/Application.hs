@@ -81,9 +81,6 @@ unknownActionErrorMsg = "Unrecognised action: "
 createInitialState :: IO (MutableServerState)
 createInitialState = newMVar newServerState
 
-isBanned :: BL.ByteString -> Bool
-isBanned _ = True
-
 serveApplication :: BL.ByteString -> MVar ServerState -> WS.Connection -> IO ()
 serveApplication addr state conn = do
     msg <- WS.receiveData conn
