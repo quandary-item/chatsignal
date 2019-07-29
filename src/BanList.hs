@@ -1,5 +1,7 @@
 module BanList (getBanList, addrIsBanned) where
 
+import qualified Data.ByteString.Lazy.Char8 as BL
+
 getBanList :: String -> IO [BL.ByteString]
 getBanList path = do
   contents <- readFile path

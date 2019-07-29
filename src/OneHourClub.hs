@@ -1,3 +1,5 @@
+module OneHourClub (isOpen) where
+
 import Data.Time.Clock
 import Data.Time.LocalTime
 import Data.Time.Zones

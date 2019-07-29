@@ -24,6 +24,7 @@ dependencies:
 - aeson
 - bytestring
 - containers
+- errors
 - exceptions
 - mtl
 - network
