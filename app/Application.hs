@@ -119,7 +119,7 @@ application addr state pending = do
     conn <- WS.acceptRequest pending
     WS.forkPingThread conn 30
 
-    connectionStatus <- (isOpenM >> (isBannedM addr))
+    connectionStatus <- (isBannedM addr >> isOpenM)
     
     case connectionStatus of
       Left IPIsBanned -> do
