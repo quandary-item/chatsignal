@@ -13,6 +13,7 @@ import Control.Concurrent (MVar, newMVar, readMVar)
 import qualified Data.Text as T
 import qualified Network.WebSockets as WS
 
+import BanList (getBanList, addrIsBanned)
 import ServerState (ServerState, Client(..), connection, newServerState)
 
 import Responses(sendSingle, ServerMessage(..), BannedResponse(..))
@@ -99,11 +100,6 @@ serveApplication addr state conn = do
 banListName :: String
 banListName = "ban_list.txt"
 
-getBanList :: String -> IO [BL.ByteString]
-getBanList path = do
-  contents <- readFile path
-  pure $ map BL.pack $ lines contents
-
 application :: BL.ByteString -> MVar ServerState -> WS.ServerApp
 application addr state pending = do
     conn <- WS.acceptRequest pending
@@ -111,7 +107,7 @@ application addr state pending = do
 
     banList <- getBanList banListName
 
-    case (addr `elem` banList) of
+    case (addrIsBanned addr banList) of
       True -> do
         putStrLn $ (BL.unpack addr) ++ " tried to log in but is marked as banned"
         sendSingle (BannedResponse) conn
