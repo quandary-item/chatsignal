@@ -28,6 +28,8 @@ dependencies:
 - mtl
 - network
 - text
+- time
+- tz
 - snap-core
 - snap-server
 - uuid
