@@ -12,10 +12,12 @@ import qualified Data.ByteString.Lazy.Char8 as BL
 import Control.Concurrent (MVar, newMVar, readMVar)
 import Control.Error.Safe (assertErr)
 import qualified Data.Text as T
+import Network.Socket (SockAddr)
 import qualified Network.WebSockets as WS
 
 import BanList (getBanList, addrIsBanned)
 import OneHourClub (isClosed)
+import NetUtils (getIPv4Address)
 import ServerState (ServerState, Client(..), connection, newServerState)
 import Responses(sendSingle, ServerMessage(..), BannedResponse(..), OneHourClubClosedResponse(..))
 import Requests(Ping, Say, OfferSDPRequest, SendICECandidate, StartCall, AcceptCall, RejectCall, ConnectRequestData, perform, ingestData)
@@ -98,8 +100,20 @@ serveApplication addr state conn = do
 banListName :: String
 banListName = "ban_list.txt"
 
-application :: BL.ByteString -> MVar ServerState -> WS.ServerApp
-application addr state pending = do
+
+application :: SockAddr -> MVar ServerState -> WS.ServerApp
+application sockAddr state pending = do
+  case getIPv4Address sockAddr of
+    Just ipv4Address -> application' ipv4Address state pending
+    Nothing          -> rejectNoIPv4 pending
+
+
+rejectNoIPv4 :: WS.ServerApp
+rejectNoIPv4 pending = WS.rejectRequest pending "Cannot accept requests from clients that do not have an IPv4 address"
+
+
+application' :: BL.ByteString -> MVar ServerState -> WS.ServerApp
+application' addr state pending = do
     conn <- WS.acceptRequest pending
     WS.forkPingThread conn 30
     putStrLn $ BL.unpack addr

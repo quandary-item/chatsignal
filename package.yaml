@@ -26,17 +26,19 @@ dependencies:
 - containers
 - errors
 - exceptions
+- http-types
 - mtl
 - network
 - text
 - time
 - tz
-- snap-core
-- snap-server
 - uuid
 - utf8-string
+- wai
+- wai-websockets
+- warp
+- warp-tls
 - websockets
-- websockets-snap
 
 library:
   source-dirs: src
