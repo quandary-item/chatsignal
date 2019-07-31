@@ -5,9 +5,10 @@ import Application (createInitialState, application, MutableServerState)
 import Network.HTTP.Types (status400)
 import qualified Network.Wai as Wai
 import Network.Wai.Handler.Warp (defaultSettings, setPort)
-import Network.Wai.Handler.WarpTLS (defaultTlsSettings, runTLS)
+import Network.Wai.Handler.WarpTLS (defaultTlsSettings, tlsSettings, runTLS)
 import Network.Wai.Handler.WebSockets
 import qualified Network.WebSockets as WS
+import System.Environment
 
 
 websocketsOr' :: WS.ConnectionOptions
@@ -26,6 +27,11 @@ backupApplication _ respond = respond $ Wai.responseLBS status400 [] "Not a WebS
 
 main :: IO ()
 main = do
+    args <- getArgs
+
     state <- createInitialState
+    let certFile = args !! 0
+    let keyFile = args !! 1
+    let localTlsSettings = tlsSettings certFile keyFile
     let localSettings = setPort 9160 $ defaultSettings
-    runTLS defaultTlsSettings localSettings $ websocketsOr' WS.defaultConnectionOptions state backupApplication
+    runTLS localTlsSettings localSettings $ websocketsOr' WS.defaultConnectionOptions state backupApplication
