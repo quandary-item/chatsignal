@@ -15,7 +15,7 @@ import qualified Data.Text as T
 import qualified Network.WebSockets as WS
 
 import BanList (getBanList, addrIsBanned)
-import OneHourClub (isOpen)
+import OneHourClub (isClosed)
 import ServerState (ServerState, Client(..), connection, newServerState)
 import Responses(sendSingle, ServerMessage(..), BannedResponse(..), OneHourClubClosedResponse(..))
 import Requests(Ping, Say, OfferSDPRequest, SendICECandidate, StartCall, AcceptCall, RejectCall, ConnectRequestData, perform, ingestData)
@@ -105,14 +105,14 @@ application addr state pending = do
     putStrLn $ BL.unpack addr
 
     banList <- getBanList banListName
-    isOpen' <- isOpen
+    isClosed' <- isClosed
 
     case (addrIsBanned addr banList) of
       True -> do
         putStrLn $ (BL.unpack addr) ++ " tried to log in but is marked as banned"
         sendSingle (BannedResponse) conn
       False -> do
-        case isOpen' of
+        case isClosed' of
           True -> do
             putStrLn $ (BL.unpack addr) ++ " tried to log in, but one hour club is closed"
             sendSingle (OneHourClubClosedResponse) conn

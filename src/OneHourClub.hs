@@ -1,4 +1,4 @@
-module OneHourClub (isOpen) where
+module OneHourClub (isClosed) where
 
 import Data.Time.Clock
 import Data.Time.LocalTime
@@ -22,10 +22,10 @@ timeOfDayIsOpen tod
   | tod > endTimeOfDay   = False
   | otherwise            = True
 
-
-isOpen :: IO Bool
-isOpen = do
+isClosed :: IO Bool
+isClosed = do
   let localTZ = tzByLabel Europe__London
   LocalTime { localTimeOfDay = currentTimeOfDay } <-
     currentLocalTimeByLabel localTZ
-  pure $ timeOfDayIsOpen currentTimeOfDay
+  pure $ not $ timeOfDayIsOpen currentTimeOfDay
+
