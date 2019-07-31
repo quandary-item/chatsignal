@@ -19,7 +19,7 @@ import GHC.Generics
 import qualified Network.WebSockets as WS
 
 import Responses (ConnectionNotify(..), ServerStateResponse(..), ServerMessage(..), OfferSDPResponse(..), SendICEResponse(..), StartCallResponse(..), AcceptCallResponse(..), RejectCallResponse(..), sendSingle, sendBroadcast)
-import ServerState (ServerState, Client(..), lookupClientById, clientExistsWithUsername, removeClient, addClient)
+import ServerState (ServerState, Client(..), lookupClientById, clientExistsWithUsername, removeClient, addClient, clientList)
 import UserID (UserID, makeRandomUserID)
 import Util (assertM, dupe)
 import WebRTC (SDPData, ICECandidate)
@@ -68,7 +68,7 @@ connectClient (client@Client { userId = clientUserId, connection = clientConnect
 
   -- Notify everyone that the party has officially started
   sendBroadcast (ServerMessage $ clientUsername `mappend` " joined") clients
-  sendBroadcast (ServerStateResponse newClients) newClients
+  sendBroadcast (ServerStateResponse $ clientList newClients) newClients
 
   -- return the updated list of clients
   pure newClients

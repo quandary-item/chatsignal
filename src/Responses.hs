@@ -8,7 +8,7 @@ module Responses where
 import Control.Monad (forM_)
 import Data.Aeson
 import UserID (UserID)
-import ServerState (ServerState, connection)
+import ServerState (Client, ServerState, connection)
 import qualified Data.Text as T
 import GHC.Generics
 import qualified Network.WebSockets as WS
@@ -20,7 +20,7 @@ data Response a = Response { kind :: T.Text, content :: a } deriving (Generic, T
 class HasKind a where
   kind :: a -> T.Text
 
-data ServerStateResponse = ServerStateResponse { clients :: ServerState } deriving (Generic, ToJSON, Show)
+data ServerStateResponse = ServerStateResponse { clients :: [Client] } deriving (Generic, ToJSON, Show)
 data ServerMessage = ServerMessage { message :: T.Text } deriving (Generic, ToJSON, Show)
 data ConnectionNotify = ConnectionNotify { user_id :: UserID } deriving (Generic, ToJSON, Show)
 data OfferSDPResponse = OfferSDPResponse { from :: UserID, sdp :: SDPData } deriving (Generic, ToJSON, Show)
