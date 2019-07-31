@@ -10,9 +10,8 @@ module Application (createInitialState, application, MutableServerState) where
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Control.Concurrent (MVar, newMVar, readMVar)
-import Control.Error.Safe (assertErr)
 import qualified Data.Text as T
-import Network.Socket (SockAddr, hostAddressToTuple)
+import Network.Socket (SockAddr)
 import qualified Network.WebSockets as WS
 
 import BanList (getBanList, addrIsBanned)
