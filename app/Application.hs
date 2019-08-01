@@ -9,6 +9,7 @@ module Application (createInitialState, application, MutableServerState) where
 
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as BL
+import Data.Time.Clock
 import Control.Concurrent (MVar, newMVar, readMVar)
 import qualified Data.Text as T
 import Network.Socket (SockAddr)
@@ -68,7 +69,9 @@ getAction = eitherDecode
 
 
 logError :: String -> WS.Connection -> IO ()
-logError errorMsg = sendSingle (ServerMessage $ T.pack errorMsg)
+logError errorMsg conn = do
+  now <- getCurrentTime
+  sendSingle (ServerMessage (T.pack errorMsg) now ) conn
 
 
 onFail :: (Monad m) => (String -> m ()) -> Either String (m ()) -> m ()

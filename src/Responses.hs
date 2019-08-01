@@ -7,6 +7,7 @@ module Responses where
 
 import Control.Monad (forM_)
 import Data.Aeson
+import Data.Time.Clock
 import UserID (UserID)
 import ServerState (Client, ServerState, connection)
 import qualified Data.Text as T
@@ -21,7 +22,7 @@ class HasKind a where
   kind :: a -> T.Text
 
 data ServerStateResponse = ServerStateResponse { clients :: [Client] } deriving (Generic, ToJSON, Show)
-data ServerMessage = ServerMessage { message :: T.Text } deriving (Generic, ToJSON, Show)
+data ServerMessage = ServerMessage { message :: T.Text, when :: UTCTime } deriving (Generic, ToJSON, Show)
 data ConnectionNotify = ConnectionNotify { user_id :: UserID } deriving (Generic, ToJSON, Show)
 data OfferSDPResponse = OfferSDPResponse { from :: UserID, sdp :: SDPData } deriving (Generic, ToJSON, Show)
 data SendICEResponse = SendICEResponse { from :: UserID, ice :: ICECandidate } deriving (Generic, ToJSON, Show)

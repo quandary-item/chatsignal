@@ -15,6 +15,7 @@ import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Data.Char (isPunctuation, isSpace)
 import qualified Data.Text as T
+import Data.Time.Clock
 import GHC.Generics
 import qualified Network.WebSockets as WS
 
@@ -53,13 +54,16 @@ disconnect userId' state = do
     Nothing -> return ()
     Just (Client { username = clientUsername }) -> do
       s <- modifyMVar state $ pure . dupe . (removeClient userId')
-      sendBroadcast (ServerMessage $ clientUsername `mappend` " disconnected") s
+      now <- getCurrentTime
+      let messageContent = clientUsername `mappend` " disconnected"
+      sendBroadcast (ServerMessage messageContent now) s
 
       
 connectClient :: Client -> ServerState -> IO ServerState
 connectClient (client@Client { userId = clientUserId, connection = clientConnection, username = clientUsername }) clients = do
   -- Send a welcome / motd
-  sendSingle (ServerMessage "Welcome to One Hour Chat!") clientConnection
+  now <- getCurrentTime
+  sendSingle (ServerMessage "Welcome to One Hour Chat!" now) clientConnection
   -- Tell the client what their user id is
   sendSingle (ConnectionNotify clientUserId) clientConnection
 
@@ -67,7 +71,8 @@ connectClient (client@Client { userId = clientUserId, connection = clientConnect
   let newClients = addClient client clients
 
   -- Notify everyone that the party has officially started
-  sendBroadcast (ServerMessage $ clientUsername `mappend` " joined") clients
+  let joinMessageContent = clientUsername `mappend` " joined"
+  sendBroadcast (ServerMessage joinMessageContent now) clients
   sendBroadcast (ServerStateResponse $ clientList newClients) newClients
 
   -- return the updated list of clients
@@ -121,7 +126,10 @@ instance Performable Ping (Client, ServerState) where
   perform ((Client { username = clientUsername }), clients) (Ping targetId) _ = do
     case lookupClientById targetId clients of
       Nothing         -> return ()
-      Just (Client { username = targetUsername }) -> sendBroadcast (ServerMessage $ clientUsername `mappend` " pinged " `mappend` targetUsername) clients
+      Just (Client { username = targetUsername }) -> do
+        now <- getCurrentTime
+        let messageContent = clientUsername `mappend` " pinged " `mappend` targetUsername
+        sendBroadcast (ServerMessage messageContent now) clients
 
 
 instance Request Say where
@@ -129,7 +137,9 @@ instance Request Say where
 
 instance Performable Say (Client, ServerState) where
   perform ((Client { username = clientUsername }), clients) (Say message) _ = do
-    sendBroadcast (ServerMessage $ clientUsername `mappend` ": " `mappend` message) clients
+    now <- getCurrentTime
+    let messageContent = clientUsername `mappend` ": " `mappend` message
+    sendBroadcast (ServerMessage messageContent now) clients
 
 
 instance Request OfferSDPRequest where
