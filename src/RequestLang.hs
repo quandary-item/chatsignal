@@ -85,3 +85,12 @@ doPing targetId = do
         let messageContent = encode $ Response { kind = "ping", content = response} 
         sendBroadcast messageContent        
         done
+
+
+doSay :: T.Text -> Free DoThingF a
+doSay message = do
+  Client { username = clientUsername } <- getClient
+  now <- getTime
+  let response = ServerMessage (clientUsername `mappend` ": " `mappend` message) now
+  sendBroadcast $ encode $ Response { kind = "", content = response }
+  done

@@ -21,7 +21,7 @@ import GHC.Generics
 import qualified Network.WebSockets as WS
 
 import Responses (ConnectionNotify(..), ServerStateResponse(..), ServerMessage(..), OfferSDPResponse(..), SendICEResponse(..), StartCallResponse(..), AcceptCallResponse(..), RejectCallResponse(..), sendSingle, sendBroadcast, Response(..))
-import RequestLang (DoThing, runDoThing, doPing)
+import RequestLang (DoThing, runDoThing, doPing, doSay)
 import ServerState (ServerState, Client(..), lookupClientById, clientExistsWithUsername, removeClient, addClient, clientList)
 import UserID (UserID, makeRandomUserID)
 import Util (assertM, dupe)
@@ -132,10 +132,7 @@ instance Request Say where
   validate _ _ = pure ()
 
 instance Performable Say (Client, ServerState) where
-  perform ((Client { username = clientUsername }), clients) (Say message) _ = do
-    now <- getCurrentTime
-    let messageContent = clientUsername `mappend` ": " `mappend` message
-    sendBroadcast (ServerMessage messageContent now) clients
+  perform context (Say message) _ = runDoThing context $ doSay message
 
 
 instance Request OfferSDPRequest where
