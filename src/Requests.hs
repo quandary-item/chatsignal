@@ -11,6 +11,7 @@ module Requests where
 import Control.Concurrent (MVar, modifyMVar, modifyMVar_, readMVar)
 import Control.Monad (forever)
 import Control.Monad.Catch (finally)
+import Control.Monad.Free (liftF)
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Data.Char (isPunctuation, isSpace)
@@ -19,7 +20,8 @@ import Data.Time.Clock
 import GHC.Generics
 import qualified Network.WebSockets as WS
 
-import Responses (ConnectionNotify(..), ServerStateResponse(..), ServerMessage(..), OfferSDPResponse(..), SendICEResponse(..), StartCallResponse(..), AcceptCallResponse(..), RejectCallResponse(..), sendSingle, sendBroadcast)
+import Responses (ConnectionNotify(..), ServerStateResponse(..), ServerMessage(..), OfferSDPResponse(..), SendICEResponse(..), StartCallResponse(..), AcceptCallResponse(..), RejectCallResponse(..), sendSingle, sendBroadcast, Response(..))
+import RequestLang (DoThing, runDoThing, doPing)
 import ServerState (ServerState, Client(..), lookupClientById, clientExistsWithUsername, removeClient, addClient, clientList)
 import UserID (UserID, makeRandomUserID)
 import Util (assertM, dupe)
@@ -122,15 +124,28 @@ data RejectCall = RejectCall { to :: UserID } deriving (FromJSON, Generic)
 instance Request Ping where
   validate _ _ = pure ()
 
+{-
 instance Performable Ping (Client, ServerState) where
-  perform ((Client { username = clientUsername }), clients) (Ping targetId) _ = do
-    case lookupClientById targetId clients of
-      Nothing         -> return ()
-      Just (Client { username = targetUsername }) -> do
-        now <- getCurrentTime
-        let messageContent = clientUsername `mappend` " pinged " `mappend` targetUsername
-        sendBroadcast (ServerMessage messageContent now) clients
+  perform (conn, handler) (Ping providedUsername) state = do
+  sendSingle (ServerMessage "Welcome to One Hour Chat!" now) clientConnection
+  -- tell the client what their user id is
+  sendSingle (ConnectionNotify clientUserId) clientConnection
 
+  -- Add the new client to the state
+  let newClients = addClient client clients
+
+  -- Notify everyone that the party has officially started
+  let joinMessageContent = clientUsername `mappend` " joined"
+  sendBroadcast (ServerMessage joinMessageContent now) clients
+  sendBroadcast (ServerStateResponse $ clientList newClients) newClients
+
+  -- return the updated list of clients
+  pure newClients
+-}
+
+
+instance Performable Ping (Client, ServerState) where
+  perform context (Ping targetId) _ = runDoThing context $ doPing targetId
 
 instance Request Say where
   validate _ _ = pure ()
