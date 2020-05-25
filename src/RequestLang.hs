@@ -15,9 +15,9 @@ import Data.Time.Clock (getCurrentTime, UTCTime)
 import qualified Network.WebSockets as WS
 
 import UserID(UserID)
-import Responses(Response(..), ServerMessage(..))
+import Responses(Response(..), ServerMessage(..), OfferSDPResponse(..))
 import ServerState(Client(..), ServerState, connection, lookupClientById)
-
+import WebRTC (SDPData)
 
 data DoThingF next
   = SendSingle BL.ByteString next
@@ -67,6 +67,7 @@ getTime = liftF (GetTime id)
 
 --sendBroadcast :: BL.ByteString -> DoThing a
 sendBroadcast message = liftF $ SendBroadcast message id
+sendSingle message = liftF $ SendSingle message id
 
 done :: DoThing a
 done = liftF Done
@@ -94,3 +95,13 @@ doSay message = do
   let response = ServerMessage (clientUsername `mappend` ": " `mappend` message) now
   sendBroadcast $ encode $ Response { kind = "", content = response }
   done
+
+
+doOfferSdpRequest :: UserID -> SDPData -> Free DoThingF a
+doOfferSdpRequest targetId sdp = do
+  client <- getClient
+  clients <- getState
+  case lookupClientById targetId clients of
+    Just targetUser -> do
+      sendSingle $ encode $ Response { kind = "", content = OfferSDPResponse (userId client) sdp}
+      done
