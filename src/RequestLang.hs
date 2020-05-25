@@ -15,12 +15,13 @@ import Data.Time.Clock (getCurrentTime, UTCTime)
 import qualified Network.WebSockets as WS
 
 import UserID(UserID)
-import Responses(Response(..), ServerMessage(..), OfferSDPResponse(..))
+import Responses(Response(..), ServerMessage(..), OfferSDPResponse(..), SendICEResponse(..))
 import ServerState(Client(..), ServerState, connection, lookupClientById)
-import WebRTC (SDPData)
+import WebRTC (ICECandidate, SDPData)
 
 data DoThingF next
   = SendSingle BL.ByteString next
+  | SendSingleTo BL.ByteString Client next
   | SendBroadcast BL.ByteString next
   | GetTime (UTCTime -> next)
   | GetClient (Client -> next)
@@ -39,6 +40,9 @@ type f ~> g = forall x. f x -> g x
 runDoThing :: (Client, ServerState) -> DoThing a -> IO ()
 runDoThing (client, clients) (Free (SendSingle msg next)) = do
   WS.sendTextData (connection client) msg
+  runDoThing (client, clients) next
+runDoThing (client, clients) (Free (SendSingleTo msg targetUser next)) = do
+  WS.sendTextData (connection targetUser) msg
   runDoThing (client, clients) next
 runDoThing (client, clients) (Free (SendBroadcast msg next)) = do
   forM_ clients $ \client -> WS.sendTextData (connection client) msg
@@ -68,6 +72,7 @@ getTime = liftF (GetTime id)
 --sendBroadcast :: BL.ByteString -> DoThing a
 sendBroadcast message = liftF $ SendBroadcast message id
 sendSingle message = liftF $ SendSingle message id
+sendSingleTo message targetUser = liftF $ SendSingleTo message targetUser id
 
 done :: DoThing a
 done = liftF Done
@@ -103,5 +108,16 @@ doOfferSdpRequest targetId sdp = do
   clients <- getState
   case lookupClientById targetId clients of
     Just targetUser -> do
-      sendSingle $ encode $ Response { kind = "", content = OfferSDPResponse (userId client) sdp}
+      sendSingleTo (encode $ Response { kind = "offer", content = OfferSDPResponse (userId client) sdp}) targetUser
       done
+
+
+doSendIceCandidate :: UserID -> ICECandidate -> Free DoThingF a
+doSendIceCandidate targetId ice = do
+  client <- getClient
+  clients <- getState
+  case lookupClientById targetId clients of
+      Just targetUser -> do
+        sendSingleTo (encode $ Response { kind = "ice", content= (SendICEResponse (userId client) ice) }) targetUser
+        done
+  
