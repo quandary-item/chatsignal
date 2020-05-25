@@ -21,7 +21,7 @@ import GHC.Generics
 import qualified Network.WebSockets as WS
 
 import Responses (ConnectionNotify(..), ServerStateResponse(..), ServerMessage(..), OfferSDPResponse(..), SendICEResponse(..), StartCallResponse(..), AcceptCallResponse(..), RejectCallResponse(..), sendSingle, sendBroadcast, Response(..))
-import RequestLang (DoThing, runDoThing, doPing, doSay, doOfferSdpRequest, doSendIceCandidate, doRejectCall)
+import RequestLang (DoThing, runDoThing, doPing, doSay, doOfferSdpRequest, doSendIceCandidate, doStartCall, doRejectCall)
 import ServerState (ServerState, Client(..), lookupClientById, clientExistsWithUsername, removeClient, addClient, clientList)
 import UserID (UserID, makeRandomUserID)
 import Util (assertM, dupe)
@@ -151,10 +151,7 @@ instance Request StartCall where
   validate _ _ = pure ()
 
 instance Performable StartCall (Client, ServerState) where
-  perform (client, clients) (StartCall targetId) _ = do
-    case lookupClientById targetId clients of
-      Nothing         -> return ()
-      Just targetUser -> sendSingle (StartCallResponse (userId client)) (connection targetUser)
+  perform context (StartCall targetId) _ = runDoThing context $ doStartCall targetId
 
 instance Request AcceptCall where
   validate _ _ = pure ()
