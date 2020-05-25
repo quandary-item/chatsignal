@@ -124,25 +124,6 @@ data RejectCall = RejectCall { to :: UserID } deriving (FromJSON, Generic)
 instance Request Ping where
   validate _ _ = pure ()
 
-{-
-instance Performable Ping (Client, ServerState) where
-  perform (conn, handler) (Ping providedUsername) state = do
-  sendSingle (ServerMessage "Welcome to One Hour Chat!" now) clientConnection
-  -- tell the client what their user id is
-  sendSingle (ConnectionNotify clientUserId) clientConnection
-
-  -- Add the new client to the state
-  let newClients = addClient client clients
-
-  -- Notify everyone that the party has officially started
-  let joinMessageContent = clientUsername `mappend` " joined"
-  sendBroadcast (ServerMessage joinMessageContent now) clients
-  sendBroadcast (ServerStateResponse $ clientList newClients) newClients
-
-  -- return the updated list of clients
-  pure newClients
--}
-
 
 instance Performable Ping (Client, ServerState) where
   perform context (Ping targetId) _ = runDoThing context $ doPing targetId
