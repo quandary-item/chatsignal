@@ -15,7 +15,7 @@ import Data.Time.Clock (getCurrentTime, UTCTime)
 import qualified Network.WebSockets as WS
 
 import UserID(UserID)
-import Responses(Response(..), ServerMessage(..), OfferSDPResponse(..), SendICEResponse(..), StartCallResponse(..), RejectCallResponse(..))
+import Responses(Response(..), ServerMessage(..), OfferSDPResponse(..), SendICEResponse(..), StartCallResponse(..), AcceptCallResponse(..), RejectCallResponse(..))
 import ServerState(Client(..), ServerState, connection, lookupClientById)
 import WebRTC (ICECandidate, SDPData)
 
@@ -130,6 +130,14 @@ doStartCall targetId = do
       sendSingleTo (encode $ Response { kind = "startcall", content = StartCallResponse (userId client) }) targetUser
       done
   
+doAcceptCall :: UserID -> Free DoThingF a
+doAcceptCall targetId = do
+  client <- getClient
+  clients <- getState
+  case lookupClientById targetId clients of
+      Just targetUser -> do
+        sendSingleTo (encode $ Response { kind = "acceptcall", content = AcceptCallResponse (userId client)}) targetUser
+        done
 
 doRejectCall :: UserID -> Free DoThingF a
 doRejectCall targetId = do
@@ -139,3 +147,4 @@ doRejectCall targetId = do
     Just targetUser -> do
       sendSingleTo (encode $ Response { kind = "rejectcall", content = RejectCallResponse (userId client) }) targetUser
       done
+
