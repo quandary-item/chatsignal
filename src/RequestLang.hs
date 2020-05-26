@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
@@ -15,6 +16,7 @@ import Data.Time.Clock (getCurrentTime, UTCTime)
 import qualified Network.WebSockets as WS
 
 import UserID(UserID)
+import Requests(Ping(..), Say(..), OfferSDPRequest(..), SendICECandidate(..), StartCall(..), AcceptCall(..), RejectCall(..))
 import Responses(Response(..), ServerMessage(..), OfferSDPResponse(..), SendICEResponse(..), StartCallResponse(..), AcceptCallResponse(..), RejectCallResponse(..))
 import ServerState(Client(..), ServerState, connection, lookupClientById)
 import WebRTC (ICECandidate, SDPData)
@@ -78,8 +80,8 @@ done :: DoThing a
 done = liftF Done
 
 
-doPing :: UserID -> Free DoThingF a
-doPing targetId = do
+doPing :: Ping -> Free DoThingF a
+doPing Ping { target = targetId } = do
   Client { username = clientUsername } <- getClient
   clients <- getState
 
@@ -93,8 +95,8 @@ doPing targetId = do
         done
 
 
-doSay :: T.Text -> Free DoThingF a
-doSay message = do
+doSay :: Say -> Free DoThingF a
+doSay Say { message = message } = do
   Client { username = clientUsername } <- getClient
   now <- getTime
   let response = ServerMessage (clientUsername `mappend` ": " `mappend` message) now
@@ -102,8 +104,8 @@ doSay message = do
   done
 
 
-doOfferSdpRequest :: UserID -> SDPData -> Free DoThingF a
-doOfferSdpRequest targetId sdp = do
+doOfferSdpRequest :: OfferSDPRequest -> Free DoThingF a
+doOfferSdpRequest OfferSDPRequest { to = targetId, sdp = sdp } = do
   client <- getClient
   clients <- getState
   case lookupClientById targetId clients of
@@ -112,8 +114,8 @@ doOfferSdpRequest targetId sdp = do
       done
 
 
-doSendIceCandidate :: UserID -> ICECandidate -> Free DoThingF a
-doSendIceCandidate targetId ice = do
+doSendIceCandidate :: SendICECandidate -> Free DoThingF a
+doSendIceCandidate SendICECandidate { to = targetId, ice = ice } = do
   client <- getClient
   clients <- getState
   case lookupClientById targetId clients of
@@ -121,8 +123,8 @@ doSendIceCandidate targetId ice = do
         sendSingleTo (encode $ Response { kind = "ice", content= (SendICEResponse (userId client) ice) }) targetUser
         done
 
-doStartCall :: UserID -> Free DoThingF a
-doStartCall targetId = do
+doStartCall :: StartCall -> Free DoThingF a
+doStartCall StartCall { to = targetId } = do
   client <- getClient
   clients <- getState
   case lookupClientById targetId clients of
@@ -130,8 +132,8 @@ doStartCall targetId = do
       sendSingleTo (encode $ Response { kind = "startcall", content = StartCallResponse (userId client) }) targetUser
       done
   
-doAcceptCall :: UserID -> Free DoThingF a
-doAcceptCall targetId = do
+doAcceptCall :: AcceptCall -> Free DoThingF a
+doAcceptCall AcceptCall { to = targetId } = do
   client <- getClient
   clients <- getState
   case lookupClientById targetId clients of
@@ -139,8 +141,8 @@ doAcceptCall targetId = do
         sendSingleTo (encode $ Response { kind = "acceptcall", content = AcceptCallResponse (userId client)}) targetUser
         done
 
-doRejectCall :: UserID -> Free DoThingF a
-doRejectCall targetId = do
+doRejectCall :: RejectCall -> Free DoThingF a
+doRejectCall RejectCall { to = targetId } = do
   client <- getClient
   clients <- getState
   case lookupClientById targetId clients of

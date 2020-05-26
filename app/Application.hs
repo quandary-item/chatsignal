@@ -31,30 +31,15 @@ instance FromJSON SelectedAction where
   parseJSON = withObject "request" $ \o -> do
     Action <$> o .: "action"
 
-
 getThingToDo :: BL.ByteString -> ServerState -> T.Text -> Either String (DoThing a)
 getThingToDo msg clients action = case action of
-  "ping" -> do
-    Ping { target = pingTargetId } <- ingestData msg clients
-    pure $ doPing pingTargetId
-  "say" -> do
-    Say { message = sayMessage } <- ingestData msg clients
-    pure $ doSay sayMessage
-  "offer" -> do
-    OfferSDPRequest { to = actionTo, sdp = actionSdp } <- ingestData msg clients
-    pure $ doOfferSdpRequest actionTo actionSdp
-  "ice" -> do
-    SendICECandidate { to = actionTo, ice = actionIce } <- ingestData msg clients
-    pure $ doSendIceCandidate actionTo actionIce
-  "startcall" -> do
-    StartCall { to = startCallTo } <- ingestData msg clients
-    pure $ doStartCall startCallTo
-  "acceptcall" -> do
-    AcceptCall { to = acceptCallTo } <- ingestData msg clients
-    pure $ doAcceptCall acceptCallTo
-  "rejectcall" -> do
-    RejectCall { to = rejectCallTo } <- ingestData msg clients
-    pure $ doRejectCall rejectCallTo
+  "ping" -> ingestData msg clients >>= (pure . doPing)
+  "say" -> ingestData msg clients >>= (pure . doSay)
+  "offer" -> ingestData msg clients >>= (pure . doOfferSdpRequest)
+  "ice" -> ingestData msg clients >>= (pure . doSendIceCandidate)
+  "startcall" -> ingestData msg clients >>= (pure . doStartCall)
+  "acceptcall" -> ingestData msg clients >>= (pure . doAcceptCall)
+  "rejectcall" -> ingestData msg clients >>= (pure . doRejectCall)
   _ -> Left $ unknownActionErrorMsg ++ (T.unpack action)
 
 

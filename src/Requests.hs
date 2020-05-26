@@ -21,7 +21,6 @@ import GHC.Generics
 import qualified Network.WebSockets as WS
 
 import Responses (ConnectionNotify(..), ServerStateResponse(..), ServerMessage(..), OfferSDPResponse(..), SendICEResponse(..), StartCallResponse(..), AcceptCallResponse(..), RejectCallResponse(..), sendSingle, sendBroadcast, Response(..))
-import RequestLang (DoThing, runDoThing, doPing, doSay, doOfferSdpRequest, doSendIceCandidate, doStartCall, doAcceptCall, doRejectCall)
 import ServerState (ServerState, Client(..), lookupClientById, clientExistsWithUsername, removeClient, addClient, clientList)
 import UserID (UserID, makeRandomUserID)
 import Util (assertM, dupe)
