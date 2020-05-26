@@ -127,36 +127,17 @@ instance Request Ping where
 instance Request Say where
   validate _ _ = pure ()
 
-instance Performable Say (Client, ServerState) where
-  perform context (Say message) _ = runDoThing context $ doSay message
-
-
 instance Request OfferSDPRequest where
   validate _ _ = pure ()
-
-instance Performable OfferSDPRequest (Client, ServerState) where
-  perform context (OfferSDPRequest targetId sdp) _ = runDoThing context $ doOfferSdpRequest targetId sdp
 
 instance Request SendICECandidate where
   validate _ _ = pure ()
 
-instance Performable SendICECandidate (Client, ServerState) where
-  perform context (SendICECandidate targetId ice) _ = runDoThing context $ doSendIceCandidate targetId ice
-
 instance Request StartCall where
   validate _ _ = pure ()
-
-instance Performable StartCall (Client, ServerState) where
-  perform context (StartCall targetId) _ = runDoThing context $ doStartCall targetId
 
 instance Request AcceptCall where
   validate _ _ = pure ()
 
-instance Performable AcceptCall (Client, ServerState) where
-  perform context (AcceptCall targetId) _ = runDoThing context $ doAcceptCall targetId
-
 instance Request RejectCall where
   validate _ _ = pure ()
-
-instance Performable RejectCall (Client, ServerState) where
-  perform context (RejectCall targetId) _ = runDoThing context $ doRejectCall targetId
