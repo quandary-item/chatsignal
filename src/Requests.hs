@@ -28,6 +28,7 @@ import WebRTC (SDPData, ICECandidate)
 
 class Request a where
   validate :: a -> ServerState -> Either String ()
+  validate _ _ = pure ()
 
 class Performable a b | a -> b where
   perform :: b -> a -> MVar ServerState -> IO ()
@@ -118,24 +119,10 @@ data StartCall = StartCall { to :: UserID } deriving (FromJSON, Generic)
 data AcceptCall = AcceptCall { to :: UserID } deriving (FromJSON, Generic)
 data RejectCall = RejectCall { to :: UserID } deriving (FromJSON, Generic)
 
-
-instance Request Ping where
-  validate _ _ = pure ()
-
-instance Request Say where
-  validate _ _ = pure ()
-
-instance Request OfferSDPRequest where
-  validate _ _ = pure ()
-
-instance Request SendICECandidate where
-  validate _ _ = pure ()
-
-instance Request StartCall where
-  validate _ _ = pure ()
-
-instance Request AcceptCall where
-  validate _ _ = pure ()
-
-instance Request RejectCall where
-  validate _ _ = pure ()
+instance Request Ping
+instance Request Say
+instance Request OfferSDPRequest
+instance Request SendICECandidate
+instance Request StartCall
+instance Request AcceptCall
+instance Request RejectCall
