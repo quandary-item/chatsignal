@@ -5,7 +5,7 @@ import Application (createInitialState, application, MutableServerState)
 import Network.HTTP.Types (status400)
 import qualified Network.Wai as Wai
 import Network.Wai.Handler.Warp (defaultSettings, setPort)
-import Network.Wai.Handler.WarpTLS (defaultTlsSettings, tlsSettings, runTLS)
+import Network.Wai.Handler.WarpTLS (tlsSettings, runTLS)
 import Network.Wai.Handler.WebSockets
 import qualified Network.WebSockets as WS
 import System.Environment

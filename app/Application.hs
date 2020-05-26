@@ -22,7 +22,7 @@ import NetUtils (getHostAddress, hostAddressToString)
 import ServerState (ServerState, Client(..), connection, newServerState)
 import Responses(sendSingle, ServerMessage(..), BannedResponse(..), OneHourClubClosedResponse(..))
 import RequestLang(runDoThing, DoThing, doPing, doSay, doOfferSdpRequest, doSendIceCandidate, doStartCall, doAcceptCall, doRejectCall)
-import Requests(Ping(..), Say(..), OfferSDPRequest(..), SendICECandidate(..), StartCall(..), AcceptCall(..), RejectCall(..), ConnectRequestData(..), perform, ingestData)
+import Requests(ConnectRequestData(..), perform, ingestData)
 
 type MutableServerState = MVar ServerState
 
@@ -76,7 +76,7 @@ createInitialState :: IO (MutableServerState)
 createInitialState = newMVar newServerState
 
 serveApplication :: String -> MVar ServerState -> WS.Connection -> IO ()
-serveApplication addr state conn = do
+serveApplication _ state conn = do
     msg <- WS.receiveData conn
 
     clients <- readMVar state

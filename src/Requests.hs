@@ -11,7 +11,6 @@ module Requests where
 import Control.Concurrent (MVar, modifyMVar, modifyMVar_, readMVar)
 import Control.Monad (forever)
 import Control.Monad.Catch (finally)
-import Control.Monad.Free (liftF)
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Data.Char (isPunctuation, isSpace)
@@ -20,7 +19,7 @@ import Data.Time.Clock
 import GHC.Generics
 import qualified Network.WebSockets as WS
 
-import Responses (ConnectionNotify(..), ServerStateResponse(..), ServerMessage(..), OfferSDPResponse(..), SendICEResponse(..), StartCallResponse(..), AcceptCallResponse(..), RejectCallResponse(..), sendSingle, sendBroadcast, Response(..))
+import Responses (ConnectionNotify(..), ServerStateResponse(..), ServerMessage(..), sendSingle, sendBroadcast, Response(..))
 import ServerState (ServerState, Client(..), lookupClientById, clientExistsWithUsername, removeClient, addClient, clientList)
 import UserID (UserID, makeRandomUserID)
 import Util (assertM, dupe)

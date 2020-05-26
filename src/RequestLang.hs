@@ -112,16 +112,18 @@ doOfferSdpRequest OfferSDPRequest { to = targetId, sdp = sdp } = do
     Just targetUser -> do
       sendSingleTo (encode $ Response { kind = "offer", content = OfferSDPResponse (userId client) sdp}) targetUser
       done
+    Nothing -> done
 
 
 doSendIceCandidate :: SendICECandidate -> Free DoThingF a
-doSendIceCandidate SendICECandidate { to = targetId, ice = ice } = do
+doSendIceCandidate SendICECandidate { to = targetId, ice = targetIce } = do
   client <- getClient
   clients <- getState
   case lookupClientById targetId clients of
       Just targetUser -> do
-        sendSingleTo (encode $ Response { kind = "ice", content= (SendICEResponse (userId client) ice) }) targetUser
+        sendSingleTo (encode $ Response { kind = "ice", content = (SendICEResponse (userId client) targetIce) }) targetUser
         done
+      Nothing -> done
 
 doStartCall :: StartCall -> Free DoThingF a
 doStartCall StartCall { to = targetId } = do
@@ -131,6 +133,7 @@ doStartCall StartCall { to = targetId } = do
     Just targetUser -> do
       sendSingleTo (encode $ Response { kind = "startcall", content = StartCallResponse (userId client) }) targetUser
       done
+    Nothing -> done
   
 doAcceptCall :: AcceptCall -> Free DoThingF a
 doAcceptCall AcceptCall { to = targetId } = do
@@ -140,6 +143,7 @@ doAcceptCall AcceptCall { to = targetId } = do
       Just targetUser -> do
         sendSingleTo (encode $ Response { kind = "acceptcall", content = AcceptCallResponse (userId client)}) targetUser
         done
+      Nothing -> done
 
 doRejectCall :: RejectCall -> Free DoThingF a
 doRejectCall RejectCall { to = targetId } = do
@@ -149,4 +153,5 @@ doRejectCall RejectCall { to = targetId } = do
     Just targetUser -> do
       sendSingleTo (encode $ Response { kind = "rejectcall", content = RejectCallResponse (userId client) }) targetUser
       done
+    Nothing -> done
 
