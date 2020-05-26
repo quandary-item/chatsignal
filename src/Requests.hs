@@ -124,10 +124,6 @@ data RejectCall = RejectCall { to :: UserID } deriving (FromJSON, Generic)
 instance Request Ping where
   validate _ _ = pure ()
 
-
-instance Performable Ping (Client, ServerState) where
-  perform context (Ping targetId) _ = runDoThing context $ doPing targetId
-
 instance Request Say where
   validate _ _ = pure ()
 

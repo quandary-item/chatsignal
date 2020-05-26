@@ -1,3 +1,4 @@
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -20,7 +21,8 @@ import OneHourClub (isClosed)
 import NetUtils (getHostAddress, hostAddressToString)
 import ServerState (ServerState, Client(..), connection, newServerState)
 import Responses(sendSingle, ServerMessage(..), BannedResponse(..), OneHourClubClosedResponse(..))
-import Requests(Ping, Say, OfferSDPRequest, SendICECandidate, StartCall, AcceptCall, RejectCall, ConnectRequestData, perform, ingestData)
+import RequestLang(runDoThing, doPing, doSay, doOfferSdpRequest, doSendIceCandidate, doStartCall, doAcceptCall, doRejectCall)
+import Requests(Ping(..), Say(..), OfferSDPRequest(..), SendICECandidate(..), StartCall(..), AcceptCall(..), RejectCall(..), ConnectRequestData(..), perform, ingestData)
 
 type MutableServerState = MVar ServerState
 
@@ -41,26 +43,33 @@ serveConnection client state = do
 
       case action of
         "ping" -> do
-          command <- ingestData msg clients
-          pure $ perform (client, clients) (command :: Ping) state
+          Ping { target = pingTargetId } <- ingestData msg clients
+          let action' = doPing pingTargetId
+          pure $ runDoThing (client, clients) action'
         "say" -> do
-          command <- ingestData msg clients
-          pure $ perform (client, clients) (command :: Say) state
+          Say { message = sayMessage } <- ingestData msg clients
+          let action' = doSay sayMessage
+          pure $ runDoThing (client, clients) action'
         "offer" -> do
-          command <- ingestData msg clients
-          pure $ perform (client, clients) (command :: OfferSDPRequest) state
+          OfferSDPRequest { to = actionTo, sdp = actionSdp } <- ingestData msg clients
+          let action' = doOfferSdpRequest actionTo actionSdp
+          pure $ runDoThing (client, clients) action'
         "ice" -> do
-          command <- ingestData msg clients
-          pure $ perform (client, clients) (command :: SendICECandidate) state
+          SendICECandidate { to = actionTo, ice = actionIce } <- ingestData msg clients
+          let action' = doSendIceCandidate actionTo actionIce
+          pure $ runDoThing (client, clients) action'
         "startcall" -> do
-          command <- ingestData msg clients
-          pure $ perform (client, clients) (command :: StartCall) state
+          StartCall { to = startCallTo } <- ingestData msg clients
+          let action' = doStartCall startCallTo
+          pure $ runDoThing (client, clients) action'
         "acceptcall" -> do
-          command <- ingestData msg clients
-          pure $ perform (client, clients) (command :: AcceptCall) state
+          AcceptCall { to = acceptCallTo } <- ingestData msg clients
+          let action' = doAcceptCall acceptCallTo
+          pure $ runDoThing (client, clients) action'
         "rejectcall" -> do
-          command <- ingestData msg clients
-          pure $ perform (client, clients) (command :: RejectCall) state
+          RejectCall { to = rejectCallTo } <- ingestData msg clients
+          let action' = doRejectCall rejectCallTo
+          pure $ runDoThing (client, clients) action'
         _ -> Left $ unknownActionErrorMsg ++ (T.unpack action)
 
 
