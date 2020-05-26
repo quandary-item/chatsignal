@@ -21,7 +21,7 @@ import OneHourClub (isClosed)
 import NetUtils (getHostAddress, hostAddressToString)
 import ServerState (ServerState, Client(..), connection, newServerState)
 import Responses(sendSingle, ServerMessage(..), BannedResponse(..), OneHourClubClosedResponse(..))
-import RequestLang(runDoThing, doPing, doSay, doOfferSdpRequest, doSendIceCandidate, doStartCall, doAcceptCall, doRejectCall)
+import RequestLang(runDoThing, DoThing, doPing, doSay, doOfferSdpRequest, doSendIceCandidate, doStartCall, doAcceptCall, doRejectCall)
 import Requests(Ping(..), Say(..), OfferSDPRequest(..), SendICECandidate(..), StartCall(..), AcceptCall(..), RejectCall(..), ConnectRequestData(..), perform, ingestData)
 
 type MutableServerState = MVar ServerState
@@ -32,6 +32,32 @@ instance FromJSON SelectedAction where
     Action <$> o .: "action"
 
 
+getThingToDo :: BL.ByteString -> ServerState -> T.Text -> Either String (DoThing a)
+getThingToDo msg clients action = case action of
+  "ping" -> do
+    Ping { target = pingTargetId } <- ingestData msg clients
+    pure $ doPing pingTargetId
+  "say" -> do
+    Say { message = sayMessage } <- ingestData msg clients
+    pure $ doSay sayMessage
+  "offer" -> do
+    OfferSDPRequest { to = actionTo, sdp = actionSdp } <- ingestData msg clients
+    pure $ doOfferSdpRequest actionTo actionSdp
+  "ice" -> do
+    SendICECandidate { to = actionTo, ice = actionIce } <- ingestData msg clients
+    pure $ doSendIceCandidate actionTo actionIce
+  "startcall" -> do
+    StartCall { to = startCallTo } <- ingestData msg clients
+    pure $ doStartCall startCallTo
+  "acceptcall" -> do
+    AcceptCall { to = acceptCallTo } <- ingestData msg clients
+    pure $ doAcceptCall acceptCallTo
+  "rejectcall" -> do
+    RejectCall { to = rejectCallTo } <- ingestData msg clients
+    pure $ doRejectCall rejectCallTo
+  _ -> Left $ unknownActionErrorMsg ++ (T.unpack action)
+
+
 serveConnection :: Client -> MVar ServerState -> IO ()
 serveConnection client state = do
     msg <- WS.receiveData $ (connection client)
@@ -40,38 +66,9 @@ serveConnection client state = do
 
     onFail (flip logError $ connection client) $ do
       (Action action) <- getAction msg
-
-      case action of
-        "ping" -> do
-          Ping { target = pingTargetId } <- ingestData msg clients
-          let action' = doPing pingTargetId
-          pure $ runDoThing (client, clients) action'
-        "say" -> do
-          Say { message = sayMessage } <- ingestData msg clients
-          let action' = doSay sayMessage
-          pure $ runDoThing (client, clients) action'
-        "offer" -> do
-          OfferSDPRequest { to = actionTo, sdp = actionSdp } <- ingestData msg clients
-          let action' = doOfferSdpRequest actionTo actionSdp
-          pure $ runDoThing (client, clients) action'
-        "ice" -> do
-          SendICECandidate { to = actionTo, ice = actionIce } <- ingestData msg clients
-          let action' = doSendIceCandidate actionTo actionIce
-          pure $ runDoThing (client, clients) action'
-        "startcall" -> do
-          StartCall { to = startCallTo } <- ingestData msg clients
-          let action' = doStartCall startCallTo
-          pure $ runDoThing (client, clients) action'
-        "acceptcall" -> do
-          AcceptCall { to = acceptCallTo } <- ingestData msg clients
-          let action' = doAcceptCall acceptCallTo
-          pure $ runDoThing (client, clients) action'
-        "rejectcall" -> do
-          RejectCall { to = rejectCallTo } <- ingestData msg clients
-          let action' = doRejectCall rejectCallTo
-          pure $ runDoThing (client, clients) action'
-        _ -> Left $ unknownActionErrorMsg ++ (T.unpack action)
-
+      case (getThingToDo msg clients action) of
+        Right m  -> Right $ runDoThing (client, clients) m
+        Left err -> Left err
 
 getAction :: BL.ByteString -> Either String SelectedAction
 getAction = eitherDecode
