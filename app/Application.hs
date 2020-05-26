@@ -66,9 +66,8 @@ serveConnection client state = do
 
     onFail (flip logError $ connection client) $ do
       (Action action) <- getAction msg
-      case (getThingToDo msg clients action) of
-        Right m  -> Right $ runDoThing (client, clients) m
-        Left err -> Left err
+      m <- getThingToDo msg clients action
+      pure $ runDoThing (client, clients) m
 
 getAction :: BL.ByteString -> Either String SelectedAction
 getAction = eitherDecode
